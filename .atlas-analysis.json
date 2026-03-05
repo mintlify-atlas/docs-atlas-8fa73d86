@@ -1,0 +1,175 @@
+{
+  "projectType": "framework",
+  "projectName": "PPG",
+  "projectDescription": "A powerful modern framework for building scalable desktop applications with Python and Qt featuring React-inspired components and Redux-style state management.",
+  "theme": "palm",
+  "primaryColor": "#04cc44",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "your-first-app"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/component-architecture",
+              "concepts/component-lifecycle",
+              "concepts/state-management",
+              "concepts/reactive-widgets",
+              "concepts/hybrid-applications"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/init",
+              "cli/start",
+              "cli/create",
+              "cli/freeze",
+              "cli/installer",
+              "cli/test",
+              "cli/clean"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/project-structure",
+              "guides/creating-components",
+              "guides/working-with-pydux",
+              "guides/building-hybrid-apps",
+              "guides/hot-reloading",
+              "guides/packaging-distribution"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-commands",
+              "advanced/build-settings",
+              "advanced/platform-specific",
+              "advanced/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/application-context",
+              "api/ppg-lifecycle",
+              "api/decorators"
+            ]
+          },
+          {
+            "group": "Pydux State Management",
+            "pages": [
+              "api/pydux/overview",
+              "api/pydux/set-schema",
+              "api/pydux/update-store",
+              "api/pydux/subscribe",
+              "api/pydux/nested-models"
+            ]
+          },
+          {
+            "group": "Reactive Widgets",
+            "pages": [
+              "api/reactive-widgets/overview",
+              "api/reactive-widgets/label",
+              "api/reactive-widgets/line-edit",
+              "api/reactive-widgets/text-edit",
+              "api/reactive-widgets/check-box",
+              "api/reactive-widgets/combo-box",
+              "api/reactive-widgets/slider",
+              "api/reactive-widgets/spin-box"
+            ]
+          },
+          {
+            "group": "Hybrid Apps",
+            "pages": [
+              "api/hybrid/web-engine-bridge",
+              "api/hybrid/bridge-manager"
+            ]
+          },
+          {
+            "group": "Settings & Resources",
+            "pages": [
+              "api/settings",
+              "api/resources",
+              "api/platform"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Example Projects",
+            "pages": [
+              "examples/first-app",
+              "examples/reactive-components",
+              "examples/pydux-store",
+              "examples/multi-screens",
+              "examples/hybrid-app"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "React-inspired component lifecycle with mounting, updating, and unmounting hooks",
+    "Pydux global state management with Pydantic validation and type safety",
+    "Reactive widgets that automatically update when state changes",
+    "Hybrid application support combining native Qt widgets with modern web UIs",
+    "Hot reloading engine for rapid development and instant feedback",
+    "Comprehensive CLI for project scaffolding, development, and packaging",
+    "Cross-platform packaging with freeze and installer commands",
+    "WebEngineBridge for seamless Python-JavaScript communication"
+  ],
+  "publicApiSurface": [
+    "ppg init - Initialize new project",
+    "ppg start - Run application in development mode",
+    "ppg create - Generate components and views",
+    "ppg freeze - Compile to standalone executable",
+    "ppg installer - Create platform-specific installer",
+    "ppg test - Run unit tests",
+    "ppg clean - Clean build artifacts",
+    "ApplicationContext - Main application context class",
+    "PPGLifeCycle - Component lifecycle mixin",
+    "Pydux - Global state management class",
+    "@init_lifecycle - Component lifecycle decorator",
+    "@hot_reloading - Hot reload decorator",
+    "Pydux.set_schema() - Define state schema",
+    "Pydux.update_store() - Update global state",
+    "Pydux.subscribe_to_store() - Subscribe to state changes",
+    "Pydux.update_nested_model() - Update nested Pydantic models",
+    "WebEngineBridge - Bridge for web-Python communication",
+    "BridgeManager - Manage web engine bridges",
+    "ReactiveLabel - Reactive label widget",
+    "ReactiveLineEdit - Reactive line edit widget",
+    "ReactiveTextEdit - Reactive text edit widget",
+    "ReactiveCheckBox - Reactive checkbox widget",
+    "ReactiveComboBox - Reactive combo box widget",
+    "ReactiveSlider - Reactive slider widget",
+    "ReactiveSpinBox - Reactive spin box widget",
+    "SETTINGS - Global build settings dictionary",
+    "path() - Resolve project paths"
+  ]
+}

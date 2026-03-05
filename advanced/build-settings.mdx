@@ -1,0 +1,458 @@
+---
+title: Build Settings
+description: Configure your application build with settings files, profiles, and runtime settings
+---
+
+PPG's build system is driven by JSON configuration files that define how your application is built for different platforms and environments.
+
+## Settings File Structure
+
+PPG loads settings from multiple JSON files in `src/build/settings/`, merging them in a specific order:
+
+1. **base.json** - Common settings for all platforms
+2. **secret.json** - Sensitive settings (credentials, API keys) - add to `.gitignore`
+3. **Platform-specific** - `mac.json`, `linux.json`, or `windows.json`
+4. **Distribution-specific** - `ubuntu.json`, `arch.json`, or `fedora.json` (Linux only)
+5. **Profile-specific** - Any additional profiles you activate
+
+Source: `ppg_runtime/_fbs.py:9-24`
+
+### Default Profile Loading
+
+```python
+def get_default_profiles():
+    result = ['base']
+    result.append('secret')
+    result.append(platform.name().lower())  # 'mac', 'linux', or 'windows'
+    if is_linux():
+        if is_ubuntu():
+            result.append('ubuntu')
+        elif is_arch_linux():
+            result.append('arch')
+        elif is_fedora():
+            result.append('fedora')
+    return result
+```
+
+## The SETTINGS Dictionary
+
+The `SETTINGS` dictionary contains all your build configuration and is available throughout your build scripts:
+
+```python
+from ppg import SETTINGS
+
+# Access settings
+app_name = SETTINGS['app_name']
+version = SETTINGS['version']
+project_dir = SETTINGS['project_dir']
+```
+
+Source: `ppg/__init__.py:9-13`
+
+### Common Settings
+
+Here are the most commonly used settings:
+
+<AccordionGroup>
+  <Accordion title="Application Identity">
+    ```json
+    {
+        "app_name": "MyApp",
+        "author": "Your Name",
+        "version": "1.0.0",
+        "description": "My application description"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Build Configuration">
+    ```json
+    {
+        "main_module": "src/main/python/main.py",
+        "freeze_dir": "target/${app_name}",
+        "hidden_imports": [],
+        "extra_pyinstaller_args": []
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Platform-Specific">
+    ```json
+    {
+        "mac_bundle_identifier": "com.example.myapp",
+        "show_console_window": false,
+        "binding": "PySide6"
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Public Settings">
+    ```json
+    {
+        "public_settings": [
+            "app_name",
+            "author",
+            "version",
+            "url"
+        ]
+    }
+    ```
+    
+    Settings in `public_settings` are embedded in your frozen application and available at runtime.
+  </Accordion>
+</AccordionGroup>
+
+## Creating Settings Files
+
+### base.json
+
+Your main configuration file:
+
+```json src/build/settings/base.json
+{
+    "app_name": "MyApp",
+    "author": "Your Name",
+    "version": "1.0.0",
+    "main_module": "src/main/python/main.py",
+    "binding": "PySide6",
+    "hidden_imports": [
+        "PySide6.QtCore",
+        "PySide6.QtWidgets"
+    ],
+    "public_settings": [
+        "app_name",
+        "version",
+        "author"
+    ]
+}
+```
+
+### Platform-Specific Settings
+
+<CodeGroup>
+
+```json mac.json
+{
+    "mac_bundle_identifier": "com.yourcompany.myapp",
+    "show_console_window": false,
+    "freeze_dir": "target/${app_name}.app"
+}
+```
+
+```json windows.json
+{
+    "show_console_window": false,
+    "freeze_dir": "target/${app_name}",
+    "installer": "${app_name}Setup.exe"
+}
+```
+
+```json linux.json
+{
+    "description": "My application for Linux",
+    "categories": "Utility;",
+    "freeze_dir": "target/${app_name}"
+}
+```
+
+</CodeGroup>
+
+### secret.json
+
+Store sensitive information (never commit to version control):
+
+```json src/build/settings/secret.json
+{
+    "windows_sign_pass": "your-certificate-password",
+    "gpg_pass": "your-gpg-password",
+    "api_key": "your-api-key"
+}
+```
+
+<Warning>
+Add `secret.json` to your `.gitignore` to prevent accidentally committing credentials.
+</Warning>
+
+## Activating Profiles
+
+Profiles let you load additional settings on demand. This is particularly useful for different build configurations.
+
+### activate_profile() Function
+
+```python
+from ppg import activate_profile, SETTINGS
+
+# Activate a release profile
+activate_profile('release')
+
+# Now release.json settings are merged into SETTINGS
+print(SETTINGS['server_url'])  # May differ from base.json
+```
+
+Source: `ppg/__init__.py:24-36`
+
+Implementation:
+
+```python
+def activate_profile(profile_name):
+    """
+    Load additional settings on the fly. A common example would be during
+    a release, where release.json contains the production server URL
+    instead of a staging server.
+    """
+    LOADED_PROFILES.append(profile_name)
+    project_dir = SETTINGS['project_dir']
+    json_paths = get_settings_paths(project_dir, LOADED_PROFILES)
+    core_settings = get_core_settings(project_dir)
+    SETTINGS.update(load_settings(json_paths, core_settings))
+```
+
+### Example: Release Profile
+
+Create `src/build/settings/release.json`:
+
+```json
+{
+    "server_url": "https://api.production.com",
+    "debug_mode": false,
+    "analytics_enabled": true
+}
+```
+
+Use it in your build script:
+
+```python
+from ppg.cmdline import command
+from ppg import activate_profile, SETTINGS
+from ppg.builtin_commands import freeze, installer
+
+@command
+def release():
+    """Build a release version"""
+    activate_profile('release')
+    
+    print(f"Building release version {SETTINGS['version']}")
+    print(f"Server: {SETTINGS['server_url']}")
+    
+    freeze()
+    installer()
+```
+
+## The path() Helper
+
+The `path()` function converts relative paths to absolute paths within your project directory:
+
+```python
+from ppg import path
+
+# Get absolute path to a file
+icon_path = path('src/main/icons/Icon.ico')
+main_module = path('src/main/python/main.py')
+
+# Use placeholders
+freeze_dir = path('${freeze_dir}')
+target_dir = path('target/${app_name}')
+```
+
+Source: `ppg/__init__.py:38-52`
+
+<Note>
+Always use forward slashes `/` in path strings, even on Windows. PPG handles the conversion automatically.
+</Note>
+
+## Placeholder Expansion
+
+PPG automatically expands placeholders in settings values using the `${key}` syntax.
+
+### How It Works
+
+Source: `ppg_runtime/_settings.py:45-53`
+
+```python
+def expand_placeholders(obj, settings):
+    if isinstance(obj, str):
+        for key, value in settings.items():
+            obj = obj.replace('${%s}' % key, str(value))
+    elif isinstance(obj, list):
+        return [expand_placeholders(o, settings) for o in obj]
+    elif isinstance(obj, dict):
+        return {k: expand_placeholders(v, settings) for k, v in obj.items()}
+    return obj
+```
+
+### Example Usage
+
+```json base.json
+{
+    "app_name": "MyApp",
+    "version": "1.0.0",
+    "freeze_dir": "target/${app_name}",
+    "installer": "${app_name}-${version}-Setup.exe",
+    "backup_dir": "${freeze_dir}/backup"
+}
+```
+
+After expansion:
+- `freeze_dir` → `"target/MyApp"`
+- `installer` → `"MyApp-1.0.0-Setup.exe"`
+- `backup_dir` → `"target/MyApp/backup"`
+
+## Merging Settings
+
+When multiple settings files define the same key, PPG merges them intelligently:
+
+### Dictionary Merging
+
+Dictionaries are merged recursively:
+
+```json base.json
+{
+    "metadata": {
+        "author": "Alice",
+        "company": "ACME"
+    }
+}
+```
+
+```json release.json
+{
+    "metadata": {
+        "version": "1.0.0"
+    }
+}
+```
+
+Result:
+```json
+{
+    "metadata": {
+        "author": "Alice",
+        "company": "ACME",
+        "version": "1.0.0"
+    }
+}
+```
+
+### List Merging
+
+Lists are concatenated, not replaced:
+
+```json base.json
+{
+    "hidden_imports": ["requests", "json"]
+}
+```
+
+```json mac.json
+{
+    "hidden_imports": ["Foundation", "AppKit"]
+}
+```
+
+Result:
+```json
+{
+    "hidden_imports": ["requests", "json", "Foundation", "AppKit"]
+}
+```
+
+Source: `ppg_runtime/_settings.py:55-65`
+
+## Hidden Imports Configuration
+
+PyInstaller may not detect all imports automatically. Use `hidden_imports` to include them:
+
+```json
+{
+    "hidden_imports": [
+        "PySide6.QtCore",
+        "PySide6.QtWidgets",
+        "PySide6.QtGui",
+        "sqlalchemy.dialects.postgresql",
+        "pkg_resources.py2_warn"
+    ]
+}
+```
+
+These imports are passed to PyInstaller via `--hidden-import` flags:
+
+Source: `ppg/freeze/__init__.py:29-30`
+
+```python
+for hidden_import in SETTINGS['hidden_imports']:
+    args.extend(['--hidden-import', hidden_import])
+```
+
+## Extra PyInstaller Arguments
+
+Customize PyInstaller behavior with additional arguments:
+
+```json
+{
+    "extra_pyinstaller_args": [
+        "--exclude-module",
+        "tkinter",
+        "--collect-all",
+        "my_package"
+    ]
+}
+```
+
+Source: `ppg/freeze/__init__.py:31`
+
+## Runtime Access to Settings
+
+Settings marked as "public" are embedded in your frozen application and accessible at runtime:
+
+```python
+from ppg_runtime import BUILD_SETTINGS
+
+# Available in your frozen app
+app_name = BUILD_SETTINGS['app_name']
+version = BUILD_SETTINGS['version']
+```
+
+The settings are filtered before embedding:
+
+Source: `ppg_runtime/_fbs.py:26-27`
+
+```python
+def filter_public_settings(settings):
+    return {k: settings[k] for k in settings['public_settings']}
+```
+
+## Settings Validation
+
+Validate settings before building:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS
+from ppg_runtime import FbsError
+
+@command
+def validate_settings():
+    """Validate required settings are present"""
+    required = ['app_name', 'version', 'author', 'main_module']
+    
+    missing = [key for key in required if key not in SETTINGS]
+    
+    if missing:
+        raise FbsError(
+            f"Missing required settings: {', '.join(missing)}\n"
+            "Please add them to src/build/settings/base.json"
+        )
+    
+    print("All required settings are present!")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Commands" icon="code" href="/advanced/custom-commands">
+    Create custom build commands that use these settings
+  </Card>
+  <Card title="Platform-Specific" icon="desktop" href="/advanced/platform-specific">
+    Handle platform differences in your builds
+  </Card>
+</CardGroup>

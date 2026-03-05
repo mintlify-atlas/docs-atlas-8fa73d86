@@ -1,0 +1,262 @@
+---
+title: ReactiveLabel
+description: Display-only text widget that updates from Pydux store state
+---
+
+## Overview
+
+`ReactiveLabel` is a reactive wrapper around Qt's `QLabel` that automatically displays text from your Pydux store. It supports both simple key binding and template formatting with multiple store values.
+
+**Source:** `ppg_runtime/ReactiveWidgets/label.py:18`
+
+## Inheritance
+
+```python
+ReactiveLabel(QLabel)
+```
+
+Inherits all methods and properties from Qt's `QLabel`.
+
+## Constructor
+
+```python
+ReactiveLabel(
+    parent,
+    key: str = "",
+    placeholder: str = "",
+    text: str = "",
+    onChange = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()` method.
+</ParamField>
+
+<ParamField path="key" type="str" default="">
+  Store key to bind to (supports nested keys like `"user.name"`). Used when `text` is not provided.
+</ParamField>
+
+<ParamField path="placeholder" type="str" default="">
+  Text to display when store value is empty or None.
+</ParamField>
+
+<ParamField path="text" type="str" default="">
+  Template string for formatting. Use `{key}` syntax to interpolate values from store.
+  
+  Example: `"Hello {username}, count: {count}"`
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[str], None]" default="None">
+  Optional callback function called when the label text changes.
+  
+  Receives the new text value as argument.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QLabel` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that updates the label text from the store. Called automatically when store changes.
+
+**Behavior:**
+- If `text` template is provided, formats the template with all store values
+- If `key` is provided, retrieves value from store using that key
+- Supports nested keys via `parent.get_nested()`
+- Uses placeholder if value is empty
+- Calls `adjustSize()` after updating text
+- Triggers `onChange` callback if provided
+
+**Source:** `ppg_runtime/ReactiveWidgets/label.py:38`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state (not typically used directly).
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/label.py:76`
+
+## Usage Examples
+
+### Simple Key Binding
+
+Display a single value from the store:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveLabel
+from PySide6.QtCore import Qt
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"username": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Display username from store
+        label = ReactiveLabel(
+            self,
+            key="username",
+            placeholder="No name set"
+        )
+        label.setAlignment(Qt.AlignCenter)
+        label.move(20, 20)
+```
+
+### Template Formatting
+
+Display formatted text with multiple store values:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "username": str,
+            "count": int,
+            "status": str,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Template with multiple values
+        ReactiveLabel(
+            self,
+            text="User: {username} | Items: {count} | Status: {status}"
+        ).move(20, 20)
+```
+
+### Nested State
+
+Access nested objects in the store:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "user": {
+                "name": str,
+                "email": str,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveLabel(self, key="user.name").move(20, 20)
+        ReactiveLabel(self, key="user.email").move(20, 50)
+```
+
+### With Change Callback
+
+React to text changes:
+
+```python
+def on_label_change(new_text):
+    print(f"Label updated to: {new_text}")
+
+ReactiveLabel(
+    self,
+    key="status",
+    onChange=on_label_change
+)
+```
+
+### Real-World Example
+
+From the reactive-components example:
+
+```python
+from ppg_runtime.ReactiveWidgets import Label, TextEdit
+from PySide6.QtCore import Qt
+
+class Reactive(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"notes": str})
+    
+    def render_(self):
+        # Label displays what user types in TextEdit
+        Label(self, key="notes", alignment=Qt.AlignCenter).move(20, 20)
+        TextEdit(
+            self, 
+            key="notes", 
+            placeholder="Type your notes here..."
+        ).setGeometry(20, 120, 600, 300)
+```
+
+**Source:** `examples/reactive-components/src/main/python/main.py:42`
+
+## Common Use Cases
+
+### Status Display
+
+Show application status or current state:
+
+```python
+ReactiveLabel(self, key="status", placeholder="Ready")
+```
+
+### Counter Display
+
+Display numeric values:
+
+```python
+ReactiveLabel(self, text="Count: {count}")
+```
+
+### Form Preview
+
+Show formatted summary of form data:
+
+```python
+ReactiveLabel(
+    self,
+    text="Name: {name}\nEmail: {email}\nAge: {age}"
+)
+```
+
+### Dynamic Messages
+
+Display user-specific messages:
+
+```python
+ReactiveLabel(self, text="Welcome back, {username}!")
+```
+
+## Notes
+
+- Label is **read-only** - it only displays store values, cannot modify them
+- Text updates are **automatic** - no manual refresh needed
+- Template formatting gracefully handles missing keys (displays template as-is)
+- Automatically calls `adjustSize()` to fit content
+- All standard `QLabel` methods are available (setAlignment, setStyleSheet, etc.)
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveLineEdit" icon="input-text" href="/api/reactive-widgets/line-edit">
+    For editable single-line text input
+  </Card>
+  <Card title="ReactiveTextEdit" icon="paragraph" href="/api/reactive-widgets/text-edit">
+    For editable multi-line text
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

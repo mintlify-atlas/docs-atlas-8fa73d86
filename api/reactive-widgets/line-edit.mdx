@@ -1,0 +1,315 @@
+---
+title: ReactiveLineEdit
+description: Single-line text input widget with bidirectional Pydux store synchronization
+---
+
+## Overview
+
+`ReactiveLineEdit` is a reactive wrapper around Qt's `QLineEdit` that provides two-way data binding with your Pydux store. User input automatically updates the store, and store changes automatically update the input field.
+
+**Source:** `ppg_runtime/ReactiveWidgets/line_edit.py:16`
+
+## Inheritance
+
+```python
+ReactiveLineEdit(QLineEdit)
+```
+
+Inherits all methods and properties from Qt's `QLineEdit`.
+
+## Constructor
+
+```python
+ReactiveLineEdit(
+    parent,
+    key: str,
+    placeholder: str = "",
+    onChange = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()` and `update_store()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind to. Supports nested keys using dot notation (e.g., `"user.name"`).
+  
+  This is the key that will be read from and written to in the store.
+</ParamField>
+
+<ParamField path="placeholder" type="str" default="">
+  Placeholder text displayed when the input is empty.
+  
+  Example: `"Enter your name"`
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[str], None]" default="None">
+  Optional callback function called when the text changes.
+  
+  Receives the new text value as argument. Called on user input, not on programmatic updates from store.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QLineEdit` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that synchronizes the input field with the store value. Called automatically when store changes.
+
+**Behavior:**
+- Retrieves value from store using `parent.get_nested(key)`
+- Updates text field only if value differs (prevents cursor jumps)
+- Uses `_updating_from_store` flag to prevent circular updates
+- Supports nested keys
+
+**Source:** `ppg_runtime/ReactiveWidgets/line_edit.py:66`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/line_edit.py:79`
+
+### _on_text_changed(text)
+
+```python
+def _on_text_changed(self, text: str)
+```
+
+Internal callback connected to Qt's `textChanged` signal. Updates the store when user types.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+<ParamField path="text" type="str">
+  The new text value entered by the user.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/line_edit.py:47`
+
+## Usage Examples
+
+### Basic Text Input
+
+Simple single-line text input:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveLineEdit
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"username": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveLineEdit(
+            self,
+            key="username",
+            placeholder="Enter your username"
+        ).setGeometry(20, 20, 200, 30)
+```
+
+### Nested State
+
+Access nested objects in the store:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "user": {
+                "name": str,
+                "email": str,
+                "phone": str,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Multiple fields editing nested state
+        ReactiveLineEdit(self, key="user.name", placeholder="Name").setGeometry(20, 20, 200, 30)
+        ReactiveLineEdit(self, key="user.email", placeholder="Email").setGeometry(20, 60, 200, 30)
+        ReactiveLineEdit(self, key="user.phone", placeholder="Phone").setGeometry(20, 100, 200, 30)
+```
+
+### With Change Callback
+
+React to user input:
+
+```python
+def on_username_change(text):
+    print(f"Username changed to: {text}")
+    # Validate input
+    if len(text) < 3:
+        print("Username too short")
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"username": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveLineEdit(
+            self,
+            key="username",
+            placeholder="Username (min 3 chars)",
+            onChange=on_username_change
+        ).setGeometry(20, 20, 200, 30)
+```
+
+### Form with Live Preview
+
+Combine with ReactiveLabel for live feedback:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveLineEdit, ReactiveLabel
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "firstName": str,
+            "lastName": str,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Input fields
+        ReactiveLineEdit(self, key="firstName", placeholder="First Name").setGeometry(20, 20, 200, 30)
+        ReactiveLineEdit(self, key="lastName", placeholder="Last Name").setGeometry(20, 60, 200, 30)
+        
+        # Live preview
+        ReactiveLabel(self, text="Full Name: {firstName} {lastName}").setGeometry(20, 120, 400, 30)
+```
+
+### Input Validation
+
+Validate and format input:
+
+```python
+def validate_email(email):
+    if '@' in email and '.' in email:
+        print("Valid email format")
+    else:
+        print("Invalid email format")
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"email": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        line_edit = ReactiveLineEdit(
+            self,
+            key="email",
+            placeholder="email@example.com",
+            onChange=validate_email
+        )
+        line_edit.setGeometry(20, 20, 250, 30)
+```
+
+### Password Input
+
+Use standard QLineEdit methods:
+
+```python
+from PySide6.QtWidgets import QLineEdit
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"password": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        password_field = ReactiveLineEdit(
+            self,
+            key="password",
+            placeholder="Enter password"
+        )
+        password_field.setEchoMode(QLineEdit.Password)
+        password_field.setGeometry(20, 20, 200, 30)
+```
+
+## Common Use Cases
+
+### User Registration Form
+
+```python
+ReactiveLineEdit(self, key="username", placeholder="Username")
+ReactiveLineEdit(self, key="email", placeholder="Email")
+ReactiveLineEdit(self, key="password", placeholder="Password")
+```
+
+### Search Box
+
+```python
+def on_search_change(query):
+    # Perform search
+    results = search_database(query)
+    self.update_store({"searchResults": results})
+
+ReactiveLineEdit(
+    self,
+    key="searchQuery",
+    placeholder="Search...",
+    onChange=on_search_change
+)
+```
+
+### Settings Input
+
+```python
+ReactiveLineEdit(self, key="settings.apiKey", placeholder="API Key")
+ReactiveLineEdit(self, key="settings.serverUrl", placeholder="Server URL")
+```
+
+### Dynamic Filter
+
+```python
+ReactiveLineEdit(self, key="filter", placeholder="Filter items...")
+```
+
+## Important Notes
+
+- **Two-way binding**: Changes flow both ways automatically
+- **Circular update prevention**: Uses `_updating_from_store` flag to prevent infinite loops
+- **Nested key support**: Use dot notation for nested objects (e.g., `"user.profile.name"`)
+- **Cursor position**: Preserved during programmatic updates
+- **All QLineEdit methods work**: setMaxLength(), setValidator(), setInputMask(), etc.
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveTextEdit" icon="paragraph" href="/api/reactive-widgets/text-edit">
+    For multi-line text input
+  </Card>
+  <Card title="ReactiveLabel" icon="tag" href="/api/reactive-widgets/label">
+    For read-only text display
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

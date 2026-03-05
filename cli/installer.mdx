@@ -1,0 +1,481 @@
+---
+title: ppg installer
+description: Create platform-specific installers for your application
+---
+
+## Overview
+
+The `ppg installer` command creates user-friendly installers for your frozen application, making it easy for end users to install your software.
+
+```bash
+ppg installer
+```
+
+<Warning>
+**Prerequisite**: You must run `ppg freeze` before creating an installer. The installer packages the frozen executable.
+</Warning>
+
+## Platform Support
+
+PPG creates native installers for each platform:
+
+| Platform | Installer Format | Extension |
+|----------|-----------------|----------|
+| Windows | NSIS Setup | `.exe` |
+| macOS | DMG Disk Image | `.dmg` |
+| Ubuntu | Debian Package | `.deb` |
+| Arch Linux | Pacman Package | `.pkg.tar.xz` |
+| Fedora/CentOS | RPM Package | `.rpm` |
+
+## Basic Usage
+
+### Create Installer
+
+```bash
+$ ppg freeze
+# Wait for freeze to complete...
+
+$ ppg installer
+
+⏳ Creating installer...
+
+This may take a while, please be patient.
+
+# Build process output...
+
+Created target/MyApp-1.0.0-Setup.exe
+```
+
+### User-Level Installation (Windows)
+
+Create an installer that installs per-user instead of system-wide:
+
+```bash
+ppg installer --user
+```
+
+<Info>
+**User-level installers** don't require administrator privileges and install to `%LOCALAPPDATA%` instead of `Program Files`.
+</Info>
+
+## Windows Installer
+
+### NSIS Setup
+
+PPG uses **NSIS (Nullsoft Scriptable Install System)** to create Windows installers.
+
+**Output**: `target/MyApp-1.0.0-Setup.exe`
+
+### Installation Modes
+
+#### System-Wide (Default)
+
+```bash
+ppg installer
+```
+
+- Requires administrator privileges
+- Installs to `C:\Program Files\MyApp\`
+- Available to all users
+- Creates Start Menu shortcuts
+- Adds to Programs and Features
+
+#### User-Level
+
+```bash
+ppg installer --user
+```
+
+- No administrator required
+- Installs to `%LOCALAPPDATA%\MyApp\`
+- Available only to current user
+- Creates personal Start Menu shortcuts
+
+### Features
+
+- ✅ Progress bar during installation
+- ✅ Custom icon and branding
+- ✅ Uninstaller creation
+- ✅ Start Menu shortcuts
+- ✅ Desktop shortcut (optional)
+- ✅ File association support
+- ✅ Registry entries
+
+### Example Output
+
+```bash
+$ ppg installer
+
+Created target/MyApp-1.0.0-Setup.exe.
+```
+
+## macOS Installer
+
+### DMG Disk Image
+
+PPG creates a `.dmg` file with a beautiful installer experience.
+
+**Output**: `target/MyApp-1.0.0.dmg`
+
+### Installation Process
+
+1. User downloads `MyApp-1.0.0.dmg`
+2. Opens the DMG file
+3. Sees the app icon and Applications folder
+4. Drags app to Applications folder
+5. Ejects the DMG
+
+### Features
+
+- ✅ Custom background image
+- ✅ App icon and Applications folder shortcut
+- ✅ Automatic layout positioning
+- ✅ Code signing ready
+- ✅ Notarization compatible
+
+### Example Output
+
+```bash
+$ ppg installer
+
+Created target/MyApp-1.0.0.dmg.
+```
+
+## Linux Installers
+
+Linux installers vary by distribution.
+
+### Ubuntu/Debian (.deb)
+
+**Output**: `target/MyApp-1.0.0-amd64.deb`
+
+```bash
+$ ppg installer
+
+Created target/MyApp-1.0.0-amd64.deb.
+
+You can for instance install it via the following command:
+    sudo dpkg -i target/MyApp-1.0.0-amd64.deb
+This places it in /opt/MyApp. To uninstall it again, you can use:
+    sudo dpkg --purge myapp
+```
+
+**Installation**:
+
+```bash
+sudo dpkg -i MyApp-1.0.0-amd64.deb
+sudo apt-get install -f  # Install dependencies
+```
+
+**Uninstallation**:
+
+```bash
+sudo dpkg --purge myapp
+```
+
+### Arch Linux (.pkg.tar.xz)
+
+**Output**: `target/MyApp-1.0.0-x86_64.pkg.tar.xz`
+
+```bash
+$ ppg installer
+
+Created target/MyApp-1.0.0-x86_64.pkg.tar.xz.
+
+You can for instance install it via the following command:
+    sudo pacman -U target/MyApp-1.0.0-x86_64.pkg.tar.xz
+This places it in /opt/MyApp. To uninstall it again, you can use:
+    sudo pacman -R myapp
+```
+
+**Installation**:
+
+```bash
+sudo pacman -U MyApp-1.0.0-x86_64.pkg.tar.xz
+```
+
+**Uninstallation**:
+
+```bash
+sudo pacman -R myapp
+```
+
+### Fedora/CentOS (.rpm)
+
+**Output**: `target/MyApp-1.0.0-x86_64.rpm`
+
+```bash
+$ ppg installer
+
+Created target/MyApp-1.0.0-x86_64.rpm.
+
+You can for instance install it via the following command:
+    sudo dnf install target/MyApp-1.0.0-x86_64.rpm
+This places it in /opt/MyApp. To uninstall it again, you can use:
+    sudo dnf remove myapp
+```
+
+**Installation (Fedora)**:
+
+```bash
+sudo dnf install MyApp-1.0.0-x86_64.rpm
+```
+
+**Installation (CentOS)**:
+
+```bash
+sudo yum install MyApp-1.0.0-x86_64.rpm
+```
+
+**Uninstallation**:
+
+```bash
+sudo dnf remove myapp   # Fedora
+sudo yum remove myapp   # CentOS
+```
+
+## Installer Settings
+
+### Configuration
+
+Installer properties are defined in `src/build/settings/`:
+
+```json
+// base.json
+{
+  "app_name": "MyApp",
+  "version": "1.0.0",
+  "author": "John Doe",
+  "description": "An amazing desktop application"
+}
+```
+
+```json
+// windows.json
+{
+  "installer": "MyApp-${version}-Setup.exe",
+  "company_name": "My Company",
+  "file_description": "MyApp Installer"
+}
+```
+
+```json
+// mac.json
+{
+  "installer": "MyApp-${version}.dmg",
+  "mac_bundle_identifier": "com.company.myapp"
+}
+```
+
+```json
+// linux.json
+{
+  "installer": "MyApp-${version}-amd64.deb",
+  "categories": "Development;",
+  "description": "My amazing application for Linux"
+}
+```
+
+### Customization
+
+#### Windows - Custom Icon
+
+Place your icon at:
+
+```
+src/main/icons/Icon.ico
+```
+
+#### macOS - Background Image
+
+Customize DMG background:
+
+```
+src/installer/mac/background.png
+```
+
+#### Linux - Desktop Entry
+
+Modify desktop file:
+
+```
+src/installer/linux/MyApp.desktop
+```
+
+## Error Handling
+
+### Frozen App Not Found
+
+```bash
+$ ppg installer
+Error: Could not find frozen app. Did you run 'ppg freeze'?
+```
+
+**Solution**: Run `ppg freeze` first.
+
+### Unsupported Distribution
+
+```bash
+Error: Your Linux distribution is not supported, sorry.
+```
+
+**Supported distributions**:
+- Ubuntu/Debian
+- Arch Linux
+- Fedora/CentOS
+
+### Missing Installer Template
+
+```bash
+Error: Could not find NSIS template at target/installer/Installer.nsi
+```
+
+**Solution**: Ensure project structure is intact. Try `ppg clean` and rebuild.
+
+## Signing Installers
+
+For production apps, sign your installers for user trust.
+
+### Windows Code Signing
+
+```bash
+ppg freeze
+ppg installer
+ppg sign_installer  # Signs the installer
+```
+
+**Requirements**:
+- Code signing certificate (.pfx file)
+- Certificate password
+
+See [Code Signing](/advanced/deployment#code-signing) for details.
+
+### macOS Notarization
+
+```bash
+ppg freeze
+ppg installer
+# Manually notarize with Apple
+```
+
+**Requirements**:
+- Apple Developer account
+- App-specific password
+- Xcode command line tools
+
+See [macOS Notarization](/advanced/deployment#notarization-macos) for details.
+
+### Linux GPG Signing
+
+```bash
+ppg sign_installer  # Arch and Fedora only
+```
+
+**Note**: Ubuntu `.deb` packages don't support signing via PPG.
+
+## Testing Installers
+
+### Windows
+
+```bash
+# Right-click MyApp-1.0.0-Setup.exe
+# Select "Run as administrator" (for system-wide)
+# Or double-click (for user-level)
+```
+
+### macOS
+
+```bash
+# Double-click MyApp-1.0.0.dmg
+# Drag app to Applications
+# Open from Applications folder
+```
+
+### Linux
+
+```bash
+# Ubuntu
+sudo dpkg -i MyApp-1.0.0-amd64.deb
+myapp  # Run the app
+
+# Arch
+sudo pacman -U MyApp-1.0.0-x86_64.pkg.tar.xz
+myapp
+
+# Fedora
+sudo dnf install MyApp-1.0.0-x86_64.rpm
+myapp
+```
+
+## Best Practices
+
+<Tip>
+**Test on Clean Machines**: Always test installers on machines without your development environment.
+</Tip>
+
+<Tip>
+**Version Numbers**: Use semantic versioning (X.Y.Z) for clear version tracking.
+</Tip>
+
+<Tip>
+**Sign Your Installers**: Users trust signed installers more, especially on Windows and macOS.
+</Tip>
+
+<Warning>
+**Don't Skip Freeze**: Always run `ppg freeze` before `ppg installer`. The installer packages the frozen app.
+</Warning>
+
+## Implementation Details
+
+The `installer` command (from `builtin_commands/__init__.py:295-349`):
+
+1. **Validates** frozen app exists
+2. **Detects** platform and distribution
+3. **Imports** platform-specific installer module
+4. **Generates** installer resources
+5. **Builds** platform-specific package
+6. **Outputs** installer file location and installation instructions
+
+## Distribution Workflow
+
+Complete workflow from code to distribution:
+
+```bash
+# 1. Clean previous builds
+ppg clean
+
+# 2. Freeze the application
+ppg freeze
+
+# 3. (Optional) Sign the frozen app
+ppg sign  # Windows/macOS
+
+# 4. Create installer
+ppg installer
+
+# 5. (Optional) Sign the installer
+ppg sign_installer  # Windows/Arch/Fedora
+
+# 6. Test the installer
+# Copy to test machine and install
+
+# 7. Distribute
+# Upload to website, GitHub releases, etc.
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Code Signing" icon="signature" href="/advanced/deployment#code-signing">
+    Sign your installers for user trust
+  </Card>
+  <Card title="Distribution Guide" icon="rocket" href="/guides/packaging-distribution">
+    Learn how to distribute your app
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg freeze](/cli/freeze) - Compile your application
+- [ppg sign](/cli/installer) - Sign frozen apps
+- [Distribution](/guides/packaging-distribution) - Publishing strategies

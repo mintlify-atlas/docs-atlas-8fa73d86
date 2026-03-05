@@ -1,0 +1,211 @@
+---
+title: 'Pydux Store'
+description: 'Manage application state with Pydux store and manual UI updates'
+---
+
+## Overview
+
+This example demonstrates manual state management using the Pydux store. Unlike [reactive components](/examples/reactive-components), this example shows how to manually handle store updates and UI synchronization using the `on_store_change` callback.
+
+## What This Example Demonstrates
+
+- Defining a store schema
+- Updating the store with `update_store()`
+- Subscribing to store changes
+- Implementing `on_store_change()` for manual UI updates
+- Manual widget state management
+- Handling user input and updating state
+
+## Complete Source Code
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.utils import app_is_frozen
+from PySide6.QtWidgets import QMainWindow, QTextEdit, QLabel
+
+
+@init_lifecycle
+@hot_reloading
+class Pydux(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({
+            "greeting": str
+        })
+
+    def render_(self):
+        self.label = QLabel('Hello World!', self)
+        self.line = QTextEdit(self, placeholderText='Type something...', textChanged=lambda: self.on_text_changed(self.line.toPlainText()))
+
+    def on_text_changed(self, text):
+        self.update_store({"greeting": text})
+
+    def responsive_UI(self):
+        self.setMinimumSize(640, 480)
+        self.label.move(20, 20)
+        self.line.setGeometry(20, 120, 600, 300)
+
+    def on_store_change(self, _):
+        self.label.setText(self.store.get("greeting", ""))
+        self.label.adjustSize()
+
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = Pydux()
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+## Code Breakdown
+
+### Store Schema Definition
+
+```python
+def component_will_mount(self):
+    self.subscribe_to_store(self)
+    self.set_schema({
+        "greeting": str
+    })
+```
+
+Defines the structure of the store:
+- `"greeting"`: A string value that will hold the user's input
+- `subscribe_to_store(self)`: Registers this component to receive store updates
+
+### Rendering with References
+
+```python
+def render_(self):
+    self.label = QLabel('Hello World!', self)
+    self.line = QTextEdit(self, placeholderText='Type something...', 
+                          textChanged=lambda: self.on_text_changed(self.line.toPlainText()))
+```
+
+Key points:
+- Store widget references (`self.label`, `self.line`) to update them later
+- Connect the `textChanged` signal to `on_text_changed` method
+- Pass the current text content to the handler
+
+### Updating the Store
+
+```python
+def on_text_changed(self, text):
+    self.update_store({"greeting": text})
+```
+
+When the user types:
+1. The `textChanged` signal fires
+2. `on_text_changed` is called with the new text
+3. `update_store()` updates the store state
+4. This triggers `on_store_change()` to be called
+
+### Responding to Store Changes
+
+```python
+def on_store_change(self, _):
+    self.label.setText(self.store.get("greeting", ""))
+    self.label.adjustSize()
+```
+
+This is the key callback for manual state management:
+- Called automatically whenever the store changes
+- Reads the new value from `self.store`
+- Manually updates the label's text
+- Adjusts the label size to fit the new text
+
+## The Store Update Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. User types in QTextEdit                                  │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. textChanged signal → on_text_changed(text)               │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. update_store({"greeting": text})                         │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 4. Store state changes                                       │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 5. on_store_change() called automatically                    │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 6. Manually update label.setText(store["greeting"])         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## When to Use Manual vs Reactive
+
+### Use Manual Store Management When:
+
+- You need complex update logic
+- You want fine-grained control over updates
+- You need to update multiple widgets based on one state change
+- You're performing calculations or transformations before displaying
+
+### Use Reactive Components When:
+
+- Simple one-to-one state-UI mapping
+- You want less boilerplate code
+- Automatic two-way binding is sufficient
+- Rapid prototyping
+
+See [Reactive Components](/examples/reactive-components) for the automatic approach.
+
+## How to Run
+
+From the example directory:
+
+```bash
+python src/main/python/main.py
+```
+
+Type in the text editor and watch the label update with your text!
+
+## Accessing Store Data
+
+```python
+# Get a value with a default
+value = self.store.get("greeting", "default value")
+
+# Direct access (may raise KeyError if key doesn't exist)
+value = self.store["greeting"]
+
+# Check if key exists
+if "greeting" in self.store:
+    value = self.store["greeting"]
+
+# Update store
+self.update_store({"greeting": "new value"})
+
+# Update multiple keys
+self.update_store({
+    "greeting": "Hello",
+    "count": 42
+})
+```
+
+## Next Steps
+
+- Learn about [Reactive Components](/examples/reactive-components) for automatic updates
+- Build [Multi-Screen Apps](/examples/multi-screens) with shared state
+- Explore [Hybrid Apps](/examples/hybrid-app) with web integration

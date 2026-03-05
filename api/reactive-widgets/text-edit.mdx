@@ -1,0 +1,379 @@
+---
+title: ReactiveTextEdit
+description: Multi-line text editor with bidirectional Pydux store synchronization
+---
+
+## Overview
+
+`ReactiveTextEdit` is a reactive wrapper around Qt's `QTextEdit` that provides two-way data binding with your Pydux store. User input automatically updates the store, and store changes automatically update the editor content.
+
+**Source:** `ppg_runtime/ReactiveWidgets/text_edit.py:16`
+
+## Inheritance
+
+```python
+ReactiveTextEdit(QTextEdit)
+```
+
+Inherits all methods and properties from Qt's `QTextEdit`.
+
+## Constructor
+
+```python
+ReactiveTextEdit(
+    parent,
+    key: str,
+    placeholder: str = "",
+    onChange = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()` and `update_store()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind to. Supports nested keys using dot notation (e.g., `"document.content"`).
+  
+  This is the key that will be read from and written to in the store.
+</ParamField>
+
+<ParamField path="placeholder" type="str" default="">
+  Placeholder text displayed when the editor is empty.
+  
+  Example: `"Enter your notes here..."`
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[str], None]" default="None">
+  Optional callback function called when the text changes.
+  
+  Receives the new plain text content as argument.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QTextEdit` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that synchronizes the editor content with the store value. Called automatically when store changes.
+
+**Behavior:**
+- Retrieves value from store using `parent.get_nested(key)`
+- Updates editor content only if value differs (prevents cursor jumps)
+- Uses `_updating_from_store` flag to prevent circular updates
+- Supports nested keys
+- Uses `toPlainText()` for comparison
+
+**Source:** `ppg_runtime/ReactiveWidgets/text_edit.py:64`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/text_edit.py:79`
+
+### _on_text_changed()
+
+```python
+def _on_text_changed(self)
+```
+
+Internal callback connected to Qt's `textChanged` signal. Updates the store when user types.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- Retrieves plain text using `toPlainText()`
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+**Source:** `ppg_runtime/ReactiveWidgets/text_edit.py:46`
+
+## Usage Examples
+
+### Basic Multi-line Editor
+
+Simple text area for user input:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveTextEdit
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"notes": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveTextEdit(
+            self,
+            key="notes",
+            placeholder="Type your notes here..."
+        ).setGeometry(20, 20, 400, 300)
+```
+
+### Notes App with Live Preview
+
+From the reactive-components example:
+
+```python
+from ppg_runtime.ReactiveWidgets import Label, TextEdit
+from PySide6.QtCore import Qt
+
+class Reactive(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"notes": str})
+    
+    def render_(self):
+        # Label displays what user types in TextEdit
+        Label(self, key="notes", alignment=Qt.AlignCenter).move(20, 20)
+        
+        # Multi-line editor
+        TextEdit(
+            self,
+            key="notes",
+            placeholder="Type your notes here..."
+        ).setGeometry(20, 120, 600, 300)
+```
+
+**Source:** `examples/reactive-components/src/main/python/main.py:38`
+
+### Nested State
+
+Access nested objects in the store:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "document": {
+                "content": str,
+                "description": str,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Main content editor
+        ReactiveTextEdit(
+            self,
+            key="document.content",
+            placeholder="Document content..."
+        ).setGeometry(20, 20, 500, 300)
+        
+        # Description editor
+        ReactiveTextEdit(
+            self,
+            key="document.description",
+            placeholder="Brief description..."
+        ).setGeometry(20, 340, 500, 100)
+```
+
+### With Change Callback
+
+Track word count or perform validation:
+
+```python
+def on_content_change(text):
+    word_count = len(text.split())
+    print(f"Word count: {word_count}")
+    # Update status
+    self.update_store({"wordCount": word_count})
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "content": str,
+            "wordCount": int,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveTextEdit(
+            self,
+            key="content",
+            placeholder="Start writing...",
+            onChange=on_content_change
+        ).setGeometry(20, 20, 500, 300)
+        
+        # Show word count
+        ReactiveLabel(
+            self,
+            text="Words: {wordCount}"
+        ).setGeometry(20, 330, 200, 30)
+```
+
+### Rich Text Editor
+
+Use standard QTextEdit methods for formatting:
+
+```python
+from PySide6.QtGui import QFont
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"document": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        editor = ReactiveTextEdit(
+            self,
+            key="document",
+            placeholder="Rich text document..."
+        )
+        editor.setGeometry(20, 20, 600, 400)
+        
+        # Set font and styling
+        font = QFont("Arial", 12)
+        editor.setFont(font)
+        editor.setAcceptRichText(True)
+```
+
+### Auto-save with Debouncing
+
+Save content periodically:
+
+```python
+from PySide6.QtCore import QTimer
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"content": str})
+        self.subscribe_to_store(self)
+        self._save_timer = QTimer()
+        self._save_timer.timeout.connect(self.save_to_file)
+    
+    def on_content_change(self, text):
+        # Restart timer on each change (debounce)
+        self._save_timer.stop()
+        self._save_timer.start(3000)  # Save after 3 seconds of inactivity
+    
+    def save_to_file(self):
+        content = self.store.get("content", "")
+        with open("document.txt", "w") as f:
+            f.write(content)
+        print("Document saved")
+    
+    def render_(self):
+        ReactiveTextEdit(
+            self,
+            key="content",
+            placeholder="Type here (auto-saves)...",
+            onChange=self.on_content_change
+        ).setGeometry(20, 20, 600, 400)
+```
+
+### Code Editor
+
+Configure for code editing:
+
+```python
+from PySide6.QtGui import QFont
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"code": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        editor = ReactiveTextEdit(
+            self,
+            key="code",
+            placeholder="# Write Python code here"
+        )
+        editor.setGeometry(20, 20, 700, 500)
+        
+        # Monospace font for code
+        font = QFont("Courier New", 10)
+        editor.setFont(font)
+        editor.setTabStopDistance(40)  # 4-space tabs
+```
+
+## Common Use Cases
+
+### Note-Taking Application
+
+```python
+ReactiveTextEdit(
+    self,
+    key="notes",
+    placeholder="Your notes here..."
+)
+```
+
+### Comment or Description Field
+
+```python
+ReactiveTextEdit(
+    self,
+    key="user.bio",
+    placeholder="Tell us about yourself..."
+)
+```
+
+### Document Editor
+
+```python
+ReactiveTextEdit(
+    self,
+    key="document.content",
+    placeholder="Start writing your document..."
+)
+```
+
+### Log Viewer (Read-only)
+
+```python
+log_viewer = ReactiveTextEdit(self, key="logs")
+log_viewer.setReadOnly(True)
+```
+
+## Important Notes
+
+- **Plain text only**: `toPlainText()` is used for store synchronization (formatting is lost)
+- **Rich text support**: Can be enabled with `setAcceptRichText(True)`, but store still gets plain text
+- **Two-way binding**: Changes flow both ways automatically
+- **Circular update prevention**: Uses `_updating_from_store` flag to prevent infinite loops
+- **Nested key support**: Use dot notation for nested objects
+- **Cursor position**: Preserved during programmatic updates from store
+- **All QTextEdit methods work**: setReadOnly(), setFont(), setAlignment(), etc.
+
+## Performance Considerations
+
+- For large documents (>10,000 lines), consider debouncing store updates
+- Use `onChange` callback to implement custom save logic
+- Consider read-only mode for log viewers
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveLineEdit" icon="input-text" href="/api/reactive-widgets/line-edit">
+    For single-line text input
+  </Card>
+  <Card title="ReactiveLabel" icon="tag" href="/api/reactive-widgets/label">
+    For read-only text display
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

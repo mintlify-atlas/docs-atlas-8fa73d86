@@ -1,0 +1,308 @@
+---
+title: 'Multi-Screen Apps'
+description: 'Build applications with multiple screens and navigation using QStackedWidget'
+---
+
+## Overview
+
+This example demonstrates how to create a multi-screen application with navigation in PPG. It shows how to structure an app with multiple views, manage screen transitions, and share state between screens using the Pydux store.
+
+## What This Example Demonstrates
+
+- Multiple screen/view architecture
+- Using `QStackedWidget` for screen management
+- Navigation between screens
+- Sharing state between screens via Pydux
+- Component-based view structure
+- Store-driven screen transitions
+
+## Project Structure
+
+```
+multi-screens/
+├── src/main/python/
+│   ├── main.py           # Main application window
+│   └── views/
+│       ├── AuthScreen.py # Login/authentication screen
+│       └── Home.py       # Home screen after login
+```
+
+## Complete Source Code
+
+### Main Application (main.py)
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.utils import app_is_frozen
+from PySide6.QtWidgets import QMainWindow, QStackedWidget
+from views.Home import Home
+from views.AuthScreen import AuthScreen
+
+# --------------------------------------------------------------------------------------
+# Important! Production Considerations for Hot Reloading
+# --------------------------------------------------------------------------------------
+# Hot reloading is a development tool that allows you to instantly see UI changes
+# when you save a file. It's extremely useful for rapid prototyping and designing
+# interfaces.
+#
+# However, this functionality is not designed for use in production environments.
+# For the final version of your application, it is highly recommended to remove
+# the code related to hot reloading, such as the `@hot_reloading` decorator
+# and the `window._init_hot_reload_system(__file__)` call.
+#
+# Keeping hot reloading active in production can negatively impact the application's
+# performance, stability, and security.
+# --------------------------------------------------------------------------------------
+
+@init_lifecycle
+@hot_reloading
+class Multiscreensdemo(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({
+            "current_screen_index": int
+        })
+
+    def render_(self):
+        self.layout = QStackedWidget()
+
+        for screen in (AuthScreen, Home):
+            self.layout.addWidget(screen())
+
+        self.setCentralWidget(self.layout)
+
+    def responsive_UI(self):
+        self.setMinimumSize(640, 480)
+
+    def on_store_change(self, _):
+        self.layout.setCurrentIndex(self.store['current_screen_index'])
+
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = Multiscreensdemo()
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+### Auth Screen View (views/AuthScreen.py)
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel
+
+@init_lifecycle
+class AuthScreen(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel('Auth Screen', self))
+        layout.addWidget(QLineEdit(self, placeholderText='Username'))
+        layout.addWidget(QLineEdit(self, placeholderText='Password', echoMode=QLineEdit.EchoMode.Password))
+        layout.addWidget(QPushButton('Login', self, clicked=self.handle_login))
+        self.setLayout(layout)
+
+    def handle_login(self):
+        self.update_store({'current_screen_index': 1})
+```
+
+### Home Screen View (views/Home.py)
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget, QLabel
+
+@init_lifecycle
+class Home(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        QLabel('Welcome Home!', self)
+```
+
+## Code Breakdown
+
+### Main Window: QStackedWidget Setup
+
+```python
+def render_(self):
+    self.layout = QStackedWidget()
+    
+    for screen in (AuthScreen, Home):
+        self.layout.addWidget(screen())
+    
+    self.setCentralWidget(self.layout)
+```
+
+`QStackedWidget` is like a deck of cards:
+- Only one screen is visible at a time
+- Each screen is added as a widget
+- Index 0 = AuthScreen
+- Index 1 = Home
+
+### Store Schema for Navigation
+
+```python
+def component_will_mount(self):
+    self.subscribe_to_store(self)
+    self.set_schema({
+        "current_screen_index": int
+    })
+```
+
+The store holds which screen should be displayed:
+- `current_screen_index: 0` → AuthScreen
+- `current_screen_index: 1` → Home
+
+### Store-Driven Navigation
+
+```python
+def on_store_change(self, _):
+    self.layout.setCurrentIndex(self.store['current_screen_index'])
+```
+
+When the store changes, the visible screen updates automatically. This centralizes navigation logic.
+
+### Navigating Between Screens
+
+From any view component:
+
+```python
+def handle_login(self):
+    self.update_store({'current_screen_index': 1})
+```
+
+This triggers:
+1. Store updates with new index
+2. Main window's `on_store_change()` is called
+3. `QStackedWidget` switches to the new screen
+
+## View Components
+
+Each screen is a separate component that:
+- Inherits from `QWidget`, `PPGLifeCycle`, and `Pydux`
+- Has its own `component_will_mount()` and `render_()` methods
+- Can access and update the shared store
+- Subscribes to store changes independently
+
+### Benefits of This Architecture
+
+1. **Separation of Concerns**: Each screen is in its own file
+2. **Reusability**: Views can be reused in different contexts
+3. **Shared State**: All views share the same Pydux store
+4. **Centralized Navigation**: Navigation logic is in one place
+5. **Easy to Extend**: Add new screens by creating new view files
+
+## How to Run
+
+From the example directory:
+
+```bash
+python src/main/python/main.py
+```
+
+The app starts on the AuthScreen. Click "Login" to navigate to the Home screen.
+
+## Navigation Patterns
+
+### Simple Index-Based Navigation
+
+```python
+# Navigate to a specific screen
+self.update_store({'current_screen_index': 2})
+```
+
+### Named Routes Pattern
+
+```python
+# Define constants for clarity
+SCREEN_AUTH = 0
+SCREEN_HOME = 1
+SCREEN_SETTINGS = 2
+
+# Navigate using named constants
+self.update_store({'current_screen_index': SCREEN_HOME})
+```
+
+### Route Mapping Pattern
+
+```python
+ROUTES = {
+    'auth': 0,
+    'home': 1,
+    'settings': 2
+}
+
+def navigate_to(self, route_name):
+    self.update_store({'current_screen_index': ROUTES[route_name]})
+
+# Usage
+self.navigate_to('home')
+```
+
+## Passing Data Between Screens
+
+Use the store to pass data:
+
+```python
+# In AuthScreen
+def handle_login(self):
+    username = self.username_input.text()
+    self.update_store({
+        'current_screen_index': 1,
+        'username': username
+    })
+
+# In Home
+def on_store_change(self, _):
+    username = self.store.get('username', 'Guest')
+    self.welcome_label.setText(f'Welcome, {username}!')
+```
+
+## Advanced: Back Navigation
+
+```python
+# In store schema
+self.set_schema({
+    "current_screen_index": int,
+    "screen_history": list
+})
+
+# When navigating forward
+def navigate_to(self, screen_index):
+    history = self.store.get('screen_history', [])
+    current = self.store.get('current_screen_index', 0)
+    history.append(current)
+    
+    self.update_store({
+        'current_screen_index': screen_index,
+        'screen_history': history
+    })
+
+# When going back
+def go_back(self):
+    history = self.store.get('screen_history', [])
+    if history:
+        previous_screen = history.pop()
+        self.update_store({
+            'current_screen_index': previous_screen,
+            'screen_history': history
+        })
+```
+
+## Next Steps
+
+- Learn about [Hybrid Apps](/examples/hybrid-app) for web-based screens
+- Explore [Pydux Store](/examples/pydux-store) for complex state management
+- Build authenticated apps with persistent state

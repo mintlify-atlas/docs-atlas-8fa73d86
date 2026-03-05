@@ -1,0 +1,163 @@
+---
+title: "set_schema"
+description: "Define the structure and types for your Pydux store"
+---
+
+## Method Signature
+
+```python
+def set_schema(self, schema_dict: Dict[str, Type]) -> None
+```
+
+## Description
+
+Defines the schema for the Pydux store by creating a dynamic Pydantic model. This method validates all state updates against the defined types and provides default values for each field.
+
+<Warning>
+  If a schema is already set, calling `set_schema()` again will reset the entire store.
+</Warning>
+
+## Parameters
+
+<ParamField path="schema_dict" type="Dict[str, Type]" required>
+  Dictionary mapping field names to their Python types. Supports all Python primitive types, collections, and Pydantic BaseModel subclasses.
+</ParamField>
+
+## Supported Types
+
+### Primitive Types
+
+```python
+self.set_schema({
+    "name": str,        # Default: ""
+    "age": int,         # Default: 0
+    "score": float,     # Default: 0.0
+    "active": bool      # Default: True
+})
+```
+
+### Optional Types
+
+```python
+from typing import Optional
+
+self.set_schema({
+    "email": Optional[str],    # Default: None
+    "phone": Optional[int]     # Default: None
+})
+```
+
+### Collections
+
+```python
+from typing import Dict, List
+
+self.set_schema({
+    "tags": list,              # Default: []
+    "items": List[str],        # Default: []
+    "metadata": dict,          # Default: {}
+    "config": Dict[str, Any]   # Default: {}
+})
+```
+
+### BaseModel Fields
+
+For Pydantic BaseModel subclasses, the schema automatically uses `default_factory`:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str = ""
+    email: str = ""
+
+self.set_schema({
+    "user": User,              # Default: User() instance
+    "settings": Optional[User] # Default: User() instance
+})
+```
+
+## Default Values
+
+Pydux automatically provides sensible defaults based on the type:
+
+| Type | Default Value |
+|------|---------------|
+| `str` | `""` (empty string) |
+| `int` | `0` |
+| `float` | `0.0` |
+| `bool` | `True` |
+| `list` | `[]` |
+| `dict` | `{}` |
+| `Optional[T]` | Default of inner type T |
+| `BaseModel` | New instance via `default_factory` |
+| `Any` | `None` |
+
+## Examples
+
+### Basic Schema
+
+```python
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "greeting": str,
+            "count": int,
+            "active": bool
+        })
+        
+        # Store is now initialized with defaults:
+        # {"greeting": "", "count": 0, "active": True}
+```
+
+### Schema with Optional Fields
+
+```python
+from typing import Optional, List
+
+self.set_schema({
+    "username": str,
+    "email": Optional[str],
+    "tags": List[str],
+    "metadata": Optional[dict]
+})
+```
+
+### Schema with Pydantic Models
+
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+class UserProfile(BaseModel):
+    name: str = ""
+    email: str = ""
+    age: int = 0
+
+class AppSettings(BaseModel):
+    theme: str = "light"
+    notifications: bool = True
+
+self.set_schema({
+    "user": UserProfile,
+    "settings": AppSettings,
+    "last_login": Optional[str]
+})
+```
+
+## Type Validation
+
+Once a schema is set, all updates are validated:
+
+```python
+# This will work
+self.update_store({"count": 42})
+
+# This will raise ValidationError
+self.update_store({"count": "not a number"})  # TypeError!
+```
+
+## Related Methods
+
+- [update_store](/api/pydux/update-store) - Update state values after schema is set
+- [update_nested_model](/api/pydux/nested-models) - Update nested Pydantic models

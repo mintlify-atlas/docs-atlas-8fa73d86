@@ -1,0 +1,289 @@
+---
+title: "update_nested_model"
+description: "Perform partial updates on nested Pydantic models in the store"
+---
+
+## Method Signature
+
+```python
+def update_nested_model(self, model_key: str, partial_data: Dict[str, Any]) -> None
+```
+
+## Description
+
+Performs a partial update on a nested Pydantic model within the store. This allows you to update specific fields of a complex object without having to replace the entire object. The method retrieves the current nested model, merges the new data using `model_copy(update=...)`, and then updates the main store.
+
+<Note>
+  This method requires a schema to be set via `set_schema()` before use.
+</Note>
+
+## Parameters
+
+<ParamField path="model_key" type="str" required>
+  The key of the nested Pydantic model in the store.
+</ParamField>
+
+<ParamField path="partial_data" type="Dict[str, Any]" required>
+  Dictionary containing only the fields to update in the nested model. Fields not specified remain unchanged.
+</ParamField>
+
+## How It Works
+
+1. Retrieves the current nested model from the store
+2. If it's a BaseModel instance, uses `model_copy(update=partial_data)`
+3. Updates the main store with the new model instance
+4. Triggers observer notifications via `update_store()`
+
+## Examples
+
+### Basic Nested Model Update
+
+```python
+from pydantic import BaseModel
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QMainWindow
+
+class UserProfile(BaseModel):
+    name: str = ""
+    email: str = ""
+    age: int = 0
+    city: str = ""
+
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        self.set_schema({
+            "user": UserProfile,
+            "settings": dict
+        })
+        
+        # Initialize with full user
+        self.update_store({
+            "user": UserProfile(
+                name="Alice",
+                email="alice@example.com",
+                age=30,
+                city="New York"
+            )
+        })
+    
+    def update_email(self, new_email):
+        # Update only the email field
+        self.update_nested_model("user", {"email": new_email})
+        # name, age, and city remain unchanged
+    
+    def update_location(self, new_city):
+        # Update only the city field
+        self.update_nested_model("user", {"city": new_city})
+```
+
+### Multiple Field Updates
+
+```python
+def update_profile(self, name, email):
+    # Update multiple fields at once
+    self.update_nested_model("user", {
+        "name": name,
+        "email": email
+    })
+    # age and city remain unchanged
+```
+
+### Complex Nested Structures
+
+```python
+from typing import List
+from pydantic import BaseModel
+
+class Address(BaseModel):
+    street: str = ""
+    city: str = ""
+    zipcode: str = ""
+
+class UserProfile(BaseModel):
+    name: str = ""
+    email: str = ""
+    addresses: List[Address] = []
+
+class AppSettings(BaseModel):
+    theme: str = "light"
+    notifications: bool = True
+    language: str = "en"
+
+self.set_schema({
+    "user": UserProfile,
+    "settings": AppSettings
+})
+
+# Update nested settings
+self.update_nested_model("settings", {
+    "theme": "dark"
+})
+# notifications and language remain unchanged
+
+# Update user profile
+self.update_nested_model("user", {
+    "email": "newemail@example.com"
+})
+# name and addresses remain unchanged
+```
+
+### Form Updates
+
+```python
+from PySide6.QtWidgets import QLineEdit, QPushButton
+
+class ProfileForm(QWidget, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.name_input = QLineEdit(self)
+        self.email_input = QLineEdit(self)
+        self.save_button = QPushButton("Save", self)
+        self.save_button.clicked.connect(self.on_save)
+    
+    def on_save(self):
+        # Update only changed fields
+        self.update_nested_model("user", {
+            "name": self.name_input.text(),
+            "email": self.email_input.text()
+        })
+```
+
+## vs update_store
+
+### Using update_nested_model (Recommended)
+
+```python
+# Partial update - only changes email
+self.update_nested_model("user", {"email": "new@example.com"})
+```
+
+### Using update_store
+
+```python
+# Need to provide entire object
+current_user = self.store.get("user")
+new_user = User(
+    name=current_user.name,
+    email="new@example.com",  # Only this changed
+    age=current_user.age,
+    city=current_user.city
+)
+self.update_store({"user": new_user})
+```
+
+`update_nested_model()` is more concise and less error-prone for partial updates.
+
+## Working with model_copy
+
+Under the hood, `update_nested_model()` uses Pydantic's `model_copy()` method:
+
+```python
+# What update_nested_model does internally:
+current_model = self.store.get("user")
+updated_model = current_model.model_copy(update=partial_data)
+self.update_store({"user": updated_model})
+```
+
+You can use this pattern directly if needed:
+
+```python
+user = self.store.get("user")
+updated_user = user.model_copy(update={"email": "new@example.com"})
+self.update_store({"user": updated_user})
+```
+
+## Accessing Nested Values
+
+### Using get_nested
+
+Pydux provides a `get_nested()` helper for dot notation access:
+
+```python
+def get_nested(self, path: str) -> Any
+```
+
+<ParamField path="path" type="str" required>
+  Dot-notated path to the value in the store (e.g., "user.name" or "user.address.city")
+</ParamField>
+
+#### Examples
+
+```python
+class Address(BaseModel):
+    street: str
+    city: str
+
+class User(BaseModel):
+    name: str
+    address: Address
+
+self.set_schema({"user": User})
+
+# Access nested values
+user_name = self.get_nested("user.name")
+user_city = self.get_nested("user.address.city")
+
+# Returns None if path doesn't exist
+missing = self.get_nested("user.nonexistent")  # None
+```
+
+### Direct Access
+
+```python
+# Via store property
+user = self.store.get("user")
+if user:
+    name = user.name
+    email = user.email
+```
+
+## Error Handling
+
+### Schema Not Set
+
+```python
+try:
+    self.update_nested_model("user", {"email": "new@example.com"})
+except ValueError as e:
+    # "Schema must be set before using update_nested_model"
+    print(e)
+```
+
+### Empty Store
+
+```python
+try:
+    self.update_nested_model("user", {"email": "new@example.com"})
+except ValueError as e:
+    # "Store is empty"
+    print(e)
+```
+
+### Invalid Field
+
+```python
+from pydantic import ValidationError
+
+try:
+    # age expects int, not string
+    self.update_nested_model("user", {"age": "thirty"})
+except TypeError as e:
+    # Validation error from Pydantic
+    print(f"Invalid data: {e}")
+```
+
+## Best Practices
+
+1. **Use for Partial Updates**: Prefer `update_nested_model()` when updating only some fields of a nested model
+2. **Initialize Models First**: Ensure nested models are initialized before partial updates
+3. **Validate Data**: Let Pydantic handle validation - don't skip field types
+4. **Keep Models Shallow**: Deeply nested structures can be harder to update; consider flatter designs
+5. **Use get_nested**: For reading nested values, `get_nested()` is cleaner than manual traversal
+
+## Related Methods
+
+- [update_store](/api/pydux/update-store) - Update top-level store values
+- [set_schema](/api/pydux/set-schema) - Define store schema with nested models
+- [get_nested](#using-get_nested) - Access nested values with dot notation

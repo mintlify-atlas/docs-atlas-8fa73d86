@@ -1,0 +1,82 @@
+---
+title: "Pydux Overview"
+description: "Redux-inspired state management for PyPlusGUI applications"
+---
+
+## Overview
+
+Pydux is a Redux-inspired state management system for PyPlusGUI applications. It provides a centralized, reactive store that manages application state with type validation through Pydantic models.
+
+## Key Features
+
+- **Singleton Pattern**: Single global store shared across the application
+- **Type Safety**: Schema validation using Pydantic models
+- **Reactive Updates**: Automatic UI updates when state changes
+- **Observer Pattern**: Subscribe components to store changes
+- **Nested Models**: Support for complex nested Pydantic models
+
+## Basic Usage
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from PySide6.QtWidgets import QMainWindow, QLabel
+
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Subscribe to store changes
+        self.subscribe_to_store(self)
+        
+        # Define the store schema
+        self.set_schema({
+            "greeting": str,
+            "count": int
+        })
+    
+    def render_(self):
+        self.label = QLabel('Hello!', self)
+    
+    def on_store_change(self, state):
+        # Called whenever the store updates
+        greeting = self.store.get("greeting", "")
+        self.label.setText(greeting)
+```
+
+## How It Works
+
+1. **Define Schema**: Use `set_schema()` to define the structure and types of your state
+2. **Subscribe**: Components subscribe to the store using `subscribe_to_store()`
+3. **Update State**: Use `update_store()` to modify state values
+4. **React**: Subscribed components receive updates via `on_store_change()` callback
+
+## Store Access
+
+Access the store through the `store` property, which returns a dictionary:
+
+```python
+# Get a value from the store
+greeting = self.store.get("greeting")
+
+# Check if a key exists
+if self.has_key("user"):
+    user = self.store.get("user")
+
+# Get nested values using dot notation
+user_name = self.get_nested("user.name")
+```
+
+## Integration with Components
+
+Pydux integrates seamlessly with PPGLifeCycle components:
+
+- Subscribe in `component_will_mount()`
+- Update state in event handlers
+- Respond to changes in `on_store_change()`
+- Automatic UI reconciliation with reactive widgets
+
+## Next Steps
+
+- [set_schema](/api/pydux/set-schema) - Define your store structure
+- [update_store](/api/pydux/update-store) - Modify state values
+- [subscribe](/api/pydux/subscribe) - React to state changes
+- [nested-models](/api/pydux/nested-models) - Work with complex nested data

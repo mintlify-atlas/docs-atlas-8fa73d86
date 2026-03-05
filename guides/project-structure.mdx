@@ -1,0 +1,229 @@
+---
+title: Project Structure
+description: Understanding the standard PPG project layout and organization
+---
+
+PPG follows a consistent project structure that separates source code, resources, and build configuration. This guide explains the standard layout and best practices for organizing your application.
+
+## Standard Project Layout
+
+When you create a new PPG project with `ppg init`, the following structure is generated:
+
+```
+my-app/
+├── src/
+│   ├── main/
+│   │   ├── python/         # Application source code
+│   │   │   └── main.py
+│   │   ├── resources/      # Static resources (HTML, CSS, images)
+│   │   │   └── base/
+│   │   └── icons/          # Application icons
+│   │       ├── Icon.ico
+│   │       ├── base/       # Common icons (16, 24, 32, 64 px)
+│   │       ├── linux/      # Linux icons (128, 256, 512, 1024 px)
+│   │       └── mac/        # macOS icons (128, 256, 512, 1024 px)
+│   ├── build/
+│   │   └── settings/       # Build configuration files
+│   │       ├── base.json
+│   │       ├── linux.json
+│   │       └── mac.json
+│   └── freeze/             # Platform-specific freeze resources
+│       ├── base/
+│       ├── linux/
+│       └── mac/
+└── requirements/           # Python dependencies
+    ├── base.txt
+    ├── linux.txt
+    ├── mac.txt
+    └── windows.txt
+```
+
+## Directory Breakdown
+
+<Accordion title="src/main/python/">
+  This is where your application code lives. The entry point is typically `main.py`, which creates your main window and starts the Qt application.
+
+  **Example main.py:**
+  ```python
+  import sys
+  from ppg_runtime.application_context.PySide6 import ApplicationContext
+  from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+  from PySide6.QtWidgets import QMainWindow, QLabel
+
+  @init_lifecycle
+  class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+      def component_will_mount(self):
+          self.subscribe_to_store(self)
+
+      def render_(self):
+          QLabel('Hello World!', parent=self)
+
+      def responsive_UI(self):
+          self.setMinimumSize(640, 480)
+
+  if __name__ == '__main__':
+      appctxt = ApplicationContext()
+      window = MyApp()
+      window.show()
+      exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+      sys.exit(exec_func())
+  ```
+</Accordion>
+
+<Accordion title="src/main/resources/">
+  Static resources like HTML files, CSS, images, and other assets. Resources are organized by platform:
+
+  - `base/` - Resources for all platforms
+  - `linux/` - Linux-specific resources
+  - `mac/` - macOS-specific resources
+  - `windows/` - Windows-specific resources
+
+  Access resources in your code using `self.get_resource()`:
+
+  ```python
+  # Load an HTML file
+  html_path = self.get_resource("index.html")
+  
+  # Load an image
+  image_path = self.get_resource("logo.png")
+  ```
+</Accordion>
+
+<Accordion title="src/main/icons/">
+  Application icons for different platforms. PPG requires icons in multiple sizes:
+
+  - **base/**: 16x16, 24x24, 32x32, 64x64 (used for Windows .ico)
+  - **linux/**: 128x128, 256x256, 512x512, 1024x1024
+  - **mac/**: 128x128, 256x256, 512x512, 1024x1024
+
+  The `Icon.ico` file in the root of this directory is the Windows icon, automatically generated from the base icons.
+</Accordion>
+
+<Accordion title="src/build/settings/">
+  Build configuration in JSON format. Settings are merged in order:
+  
+  1. `base.json` - Common settings for all platforms
+  2. Platform-specific JSON (e.g., `linux.json`, `mac.json`)
+
+  **Example base.json:**
+  ```json
+  {
+      "app_name": "MyApp",
+      "author": "Your Name",
+      "main_module": "src/main/python/main.py",
+      "version": "1.0.0"
+  }
+  ```
+
+  **Example mac.json:**
+  ```json
+  {
+      "mac_bundle_identifier": "com.yourcompany.myapp"
+  }
+  ```
+</Accordion>
+
+<Accordion title="requirements/">
+  Python package dependencies organized by platform:
+
+  - `base.txt` - Dependencies for all platforms
+  - `linux.txt` - Linux-only dependencies
+  - `mac.txt` - macOS-only dependencies
+  - `windows.txt` - Windows-only dependencies
+
+  Install dependencies with:
+  ```bash
+  pip install -r requirements/base.txt
+  ```
+</Accordion>
+
+## File Organization Best Practices
+
+<Steps>
+  <Step title="Separate concerns">
+    Organize your code into modules and packages. Create subdirectories under `src/main/python/` for different parts of your application:
+
+    ```
+    src/main/python/
+    ├── main.py
+    ├── components/      # Reusable UI components
+    │   ├── __init__.py
+    │   ├── navbar.py
+    │   └── sidebar.py
+    ├── views/           # Application screens/views
+    │   ├── __init__.py
+    │   ├── home.py
+    │   └── settings.py
+    └── utils/           # Utility functions
+        ├── __init__.py
+        └── helpers.py
+    ```
+  </Step>
+
+  <Step title="Use platform-specific resources">
+    Place platform-specific resources in the appropriate subdirectories:
+
+    ```
+    src/main/resources/
+    ├── base/
+    │   ├── styles.css
+    │   └── logo.png
+    ├── mac/
+    │   └── menu-template.json
+    └── windows/
+        └── context-menu.json
+    ```
+  </Step>
+
+  <Step title="Keep configuration separate">
+    Store configuration in `src/build/settings/` rather than hardcoding values:
+
+    ```python
+    # Access build settings in your code
+    app_name = self.build_settings['app_name']
+    version = self.build_settings['version']
+    ```
+  </Step>
+</Steps>
+
+## Working with Multiple Screens
+
+For applications with multiple screens, create separate component files:
+
+```python
+# src/main/python/views/home.py
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from PySide6.QtWidgets import QWidget, QLabel
+
+@init_lifecycle
+class HomeScreen(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        QLabel('Home Screen', parent=self)
+
+    def responsive_UI(self):
+        pass
+```
+
+```python
+# src/main/python/main.py
+from views.home import HomeScreen
+
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.home = HomeScreen(self)
+        self.setCentralWidget(self.home)
+```
+
+<Note>
+  The project structure is designed to work seamlessly with PPG's build system. Keep your application code in `src/main/python/` and resources in `src/main/resources/` for proper packaging.
+</Note>
+
+## Next Steps
+
+- [Creating Components](/guides/creating-components) - Learn how to build reusable components
+- [Working with Pydux](/guides/working-with-pydux) - Implement state management
+- [Hot Reloading](/guides/hot-reloading) - Speed up development with instant updates

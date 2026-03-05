@@ -1,0 +1,493 @@
+---
+title: Reactive Widgets
+description: Build dynamic UIs with widgets that automatically sync with your application state
+---
+
+## Overview
+
+**Reactive widgets** are PPG's solution to automatic UI synchronization. Instead of manually updating widgets when state changes, reactive widgets automatically reflect the current state of your Pydux store.
+
+<Note>
+Reactive widgets eliminate the need for manual UI updates in `on_store_change()`, reducing boilerplate code and potential bugs.
+</Note>
+
+## The Problem with Manual Updates
+
+Traditional Qt development requires manual synchronization:
+
+```python
+class TraditionalApp(QMainWindow, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.label = QLabel("Hello", self)
+        self.input = QLineEdit(self)
+        self.input.textChanged.connect(self.on_text_changed)
+    
+    def on_text_changed(self, text):
+        # Update store manually
+        self.update_store({"greeting": text})
+    
+    def on_store_change(self, store):
+        # Update UI manually - easy to forget!
+        greeting = self.store.get("greeting", "")
+        self.label.setText(greeting)
+        self.label.adjustSize()
+```
+
+Problems with this approach:
+- Lots of boilerplate code
+- Easy to forget UI updates
+- Bi-directional sync requires careful management
+- Potential for UI and state to get out of sync
+
+## The Reactive Solution
+
+Reactive widgets handle synchronization automatically:
+
+```python
+from ppg_runtime.ReactiveWidgets import Label, LineEdit
+from PySide6.QtCore import Qt
+
+class ReactiveApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"greeting": str})
+    
+    def render_(self):
+        # Widgets automatically sync with the "greeting" key
+        Label(self, key="greeting", alignment=Qt.AlignCenter).move(20, 20)
+        LineEdit(self, key="greeting", placeholder="Type here...").move(20, 60)
+    
+    # No need for on_store_change() - widgets update automatically!
+```
+
+<Info>
+Reactive widgets bi-directionally sync with your store: changes in the widget update the store, and changes in the store update the widget.
+</Info>
+
+## Available Reactive Widgets
+
+PPG provides reactive versions of common Qt widgets:
+
+| Widget | Import | Use Case |
+|--------|--------|----------|
+| `ReactiveLabel` | `from ppg_runtime.ReactiveWidgets import Label` | Display text from state |
+| `ReactiveLineEdit` | `from ppg_runtime.ReactiveWidgets import LineEdit` | Single-line text input |
+| `ReactiveTextEdit` | `from ppg_runtime.ReactiveWidgets import TextEdit` | Multi-line text input |
+| `ReactiveCheckBox` | `from ppg_runtime.ReactiveWidgets import CheckBox` | Boolean values |
+| `ReactiveComboBox` | `from ppg_runtime.ReactiveWidgets import ComboBox` | Dropdown selections |
+| `ReactiveSlider` | `from ppg_runtime.ReactiveWidgets import Slider` | Numeric values |
+| `ReactiveSpinBox` | `from ppg_runtime.ReactiveWidgets import SpinBox` | Integer input |
+
+## ReactiveLabel
+
+Display state values as text:
+
+```python
+from ppg_runtime.ReactiveWidgets import Label
+from PySide6.QtCore import Qt
+
+# Basic usage
+Label(self, key="username").move(20, 20)
+
+# With alignment
+Label(self, key="title", alignment=Qt.AlignCenter).move(20, 60)
+
+# With template formatting
+Label(self, text="Welcome, {username}!").move(20, 100)
+
+# With placeholder
+Label(self, key="status", placeholder="No status").move(20, 140)
+```
+
+### Template Formatting
+
+Labels support format strings that pull from the entire store:
+
+```python
+def component_will_mount(self):
+    self.set_schema({
+        "firstName": str,
+        "lastName": str,
+        "age": int
+    })
+
+def render_(self):
+    # Use curly braces for template variables
+    Label(self, text="Name: {firstName} {lastName}").move(20, 20)
+    Label(self, text="Age: {age} years old").move(20, 60)
+```
+
+### onChange Callback
+
+```python
+Label(
+    self, 
+    key="notification",
+    onChange=lambda value: print(f"Notification changed to: {value}")
+).move(20, 20)
+```
+
+## ReactiveLineEdit
+
+Single-line text input synchronized with state:
+
+```python
+from ppg_runtime.ReactiveWidgets import LineEdit
+
+# Basic usage
+LineEdit(self, key="username").move(20, 20)
+
+# With placeholder
+LineEdit(self, key="email", placeholder="Enter your email").move(20, 60)
+
+# With onChange callback
+LineEdit(
+    self,
+    key="search",
+    placeholder="Search...",
+    onChange=lambda text: self.perform_search(text)
+).move(20, 100)
+
+# With nested model support
+LineEdit(self, key="user.email").move(20, 140)
+```
+
+### Nested Model Support
+
+Reactive widgets work with nested Pydantic models using dot notation:
+
+```python
+from pydantic import BaseModel
+
+class UserModel(BaseModel):
+    name: str = ""
+    email: str = ""
+
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"user": UserModel})
+    
+    def render_(self):
+        # Use dot notation for nested fields
+        LineEdit(self, key="user.name", placeholder="Name").move(20, 20)
+        LineEdit(self, key="user.email", placeholder="Email").move(20, 60)
+```
+
+## ReactiveTextEdit
+
+Multi-line text input:
+
+```python
+from ppg_runtime.ReactiveWidgets import TextEdit
+
+# Basic usage
+TextEdit(self, key="notes").setGeometry(20, 20, 400, 200)
+
+# With placeholder
+TextEdit(
+    self,
+    key="description",
+    placeholder="Enter a description..."
+).setGeometry(20, 20, 400, 200)
+
+# With onChange callback
+TextEdit(
+    self,
+    key="content",
+    onChange=lambda text: self.auto_save(text)
+).setGeometry(20, 20, 400, 200)
+```
+
+## Complete Example
+
+Here's a complete note-taking app using reactive widgets:
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.ReactiveWidgets import Label, LineEdit, TextEdit
+from PySide6.QtWidgets import QMainWindow
+from PySide6.QtCore import Qt
+
+@init_lifecycle
+class NotesApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Define state schema
+        self.set_schema({
+            "title": str,
+            "content": str,
+            "wordCount": int,
+            "lastSaved": str
+        })
+        
+        # Initialize state
+        self.update_store({
+            "title": "",
+            "content": "",
+            "wordCount": 0,
+            "lastSaved": "Never"
+        })
+    
+    def render_(self):
+        # Header with template formatting
+        Label(
+            self,
+            text="Notes App - {wordCount} words",
+            alignment=Qt.AlignCenter
+        ).move(20, 20)
+        
+        # Title input
+        LineEdit(
+            self,
+            key="title",
+            placeholder="Enter note title...",
+            onChange=self.on_title_change
+        ).setGeometry(20, 60, 560, 30)
+        
+        # Content editor
+        TextEdit(
+            self,
+            key="content",
+            placeholder="Start typing your note...",
+            onChange=self.on_content_change
+        ).setGeometry(20, 110, 560, 300)
+        
+        # Status bar
+        Label(
+            self,
+            text="Last saved: {lastSaved}"
+        ).move(20, 430)
+    
+    def on_title_change(self, title):
+        print(f"Title changed to: {title}")
+        self.auto_save()
+    
+    def on_content_change(self, content):
+        # Update word count
+        word_count = len(content.split()) if content else 0
+        self.update_store({"wordCount": word_count})
+        self.auto_save()
+    
+    def auto_save(self):
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.update_store({"lastSaved": timestamp})
+    
+    def responsive_UI(self):
+        self.setMinimumSize(600, 500)
+```
+
+## How Reactive Widgets Work
+
+### ReactiveStoreDict
+
+Reactive widgets are powered by `ReactiveStoreDict`, a special dictionary that tracks dependencies:
+
+```python
+class ReactiveStoreDict(dict):
+    """
+    A reactive dictionary that automatically notifies dependent widgets of changes.
+    
+    When a value is updated, it only notifies the widgets that depend on that 
+    particular key, optimizing the update process.
+    """
+    
+    def __getitem__(self, key):
+        # Track which widget is accessing this key
+        if self._tracking_widget:
+            self._deps.setdefault(key, set()).add(self._tracking_widget)
+        return super().__getitem__(key)
+    
+    def __setitem__(self, key, value):
+        # Update value and notify dependent widgets
+        super().__setitem__(key, value)
+        self.notify_key(key)
+    
+    def notify_key(self, key):
+        # Only update widgets that depend on this key
+        if key in self._deps:
+            for widget in self._deps[key]:
+                widget._update_from_store(key)
+```
+
+### Widget Implementation Pattern
+
+All reactive widgets follow this pattern:
+
+```python
+class ReactiveLineEdit(QLineEdit):
+    def __init__(self, parent, key, placeholder="", onChange=None):
+        super().__init__(parent)
+        self._store_key = key
+        self._parent = parent
+        self._updating_from_store = False
+        self._onChange = onChange
+        
+        # Initialize from store
+        self._update_from_store()
+        
+        # Connect to widget signals
+        self.textChanged.connect(self._on_text_changed)
+        
+        # Subscribe to store changes
+        if hasattr(parent, "subscribe_to_store"):
+            parent.subscribe_to_store(self)
+    
+    def _on_text_changed(self, text):
+        # Prevent infinite loops
+        if self._updating_from_store:
+            return
+        
+        # Update store when widget changes
+        self._parent.update_store({self._store_key: text})
+        
+        if callable(self._onChange):
+            self._onChange(text)
+    
+    def _update_from_store(self):
+        # Update widget when store changes
+        value = self._parent.get_nested(self._store_key) or ""
+        if self.text() != str(value):
+            self._updating_from_store = True
+            self.setText(str(value))
+            self._updating_from_store = False
+    
+    def on_store_change(self, store):
+        # Called automatically when store updates
+        self._update_from_store()
+```
+
+## Performance Optimization
+
+### Selective Updates
+
+Reactive widgets only update when their specific key changes:
+
+```python
+# Component A updates "username"
+self.update_store({"username": "john"})
+
+# Only widgets with key="username" will update
+# Widgets with key="email" or key="age" won't update
+```
+
+### Preventing Infinite Loops
+
+Reactive widgets use the `_updating_from_store` flag to prevent circular updates:
+
+```python
+def _on_text_changed(self, text):
+    # Don't update store if this change came from the store
+    if self._updating_from_store:
+        return
+    
+    # Safe to update store
+    self._parent.update_store({self._store_key: text})
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Reactive Widgets by Default">
+    Always prefer reactive widgets over manual UI updates when working with Pydux.
+  </Step>
+  
+  <Step title="Set Schema Before Creating Widgets">
+    Define your schema in `component_will_mount()` before `render_()` creates reactive widgets.
+  </Step>
+  
+  <Step title="Use Dot Notation for Nested State">
+    Access nested Pydantic models with `key="model.field"` syntax.
+  </Step>
+  
+  <Step title="Leverage onChange Callbacks">
+    Use onChange callbacks for side effects like validation or API calls.
+  </Step>
+  
+  <Step title="Avoid Manual Updates">
+    Don't manually update reactive widgets in `on_store_change()` - they update automatically.
+  </Step>
+</Steps>
+
+## Mixing Reactive and Traditional Widgets
+
+You can mix reactive and traditional widgets:
+
+```python
+def render_(self):
+    # Reactive widget - auto-syncs
+    LineEdit(self, key="username").move(20, 20)
+    
+    # Traditional widget - manual control
+    self.custom_widget = CustomWidget(self)
+    self.custom_widget.move(20, 60)
+
+def on_store_change(self, store):
+    # Only update traditional widgets manually
+    if hasattr(self, 'custom_widget'):
+        self.custom_widget.update_data(self.store)
+```
+
+## Common Patterns
+
+### Form Inputs
+
+```python
+from ppg_runtime.ReactiveWidgets import LineEdit, CheckBox
+from pydantic import BaseModel
+
+class FormData(BaseModel):
+    name: str = ""
+    email: str = ""
+    subscribe: bool = False
+
+class MyForm(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"form": FormData})
+    
+    def render_(self):
+        LineEdit(self, key="form.name", placeholder="Name").move(20, 20)
+        LineEdit(self, key="form.email", placeholder="Email").move(20, 60)
+        CheckBox(self, key="form.subscribe", text="Subscribe to newsletter").move(20, 100)
+```
+
+### Search with Debouncing
+
+```python
+from PySide6.QtCore import QTimer
+
+class SearchApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"query": str, "results": list})
+        self.search_timer = QTimer()
+        self.search_timer.setSingleShot(True)
+        self.search_timer.timeout.connect(self.perform_search)
+    
+    def render_(self):
+        LineEdit(
+            self,
+            key="query",
+            placeholder="Search...",
+            onChange=self.on_search_change
+        ).move(20, 20)
+    
+    def on_search_change(self, query):
+        # Debounce search - wait 300ms after typing stops
+        self.search_timer.start(300)
+    
+    def perform_search(self):
+        query = self.store.get("query", "")
+        if query:
+            results = self.api.search(query)
+            self.update_store({"results": results})
+```
+
+## Next Steps
+
+- Learn about [State Management](/concepts/state-management) with Pydux
+- Explore [Component Lifecycle](/concepts/component-lifecycle) hooks
+- Build [Hybrid Applications](/concepts/hybrid-applications) with reactive UIs

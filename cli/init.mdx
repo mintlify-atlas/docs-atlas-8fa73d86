@@ -1,0 +1,235 @@
+---
+title: ppg init
+description: Initialize a new PPG project with interactive setup
+---
+
+## Overview
+
+The `ppg init` command creates a new PPG project in your current directory. It guides you through an interactive setup process to configure your application's basic settings.
+
+```bash
+ppg init
+```
+
+<Warning>
+This command will abort if a `src/` directory already exists in the current location to prevent overwriting existing projects.
+</Warning>
+
+## Interactive Setup
+
+When you run `ppg init`, you'll be prompted for the following information:
+
+### 1. App Name
+
+Your application's display name. PPG automatically converts this to CamelCase format.
+
+```bash
+? App name: my awesome app
+# Converted to: MyAwesomeApp
+```
+
+<Info>
+**Name Conversion**: The `to_camel_case()` function handles snake_case, kebab-case, and space-separated names:
+- `my_app` → `MyApp`
+- `my-app` → `MyApp`  
+- `my awesome app` → `MyAwesomeApp`
+</Info>
+
+### 2. Version
+
+Your app's initial version number (default: `1.0.0`).
+
+```bash
+? Version: 1.0.0
+```
+
+### 3. Author
+
+Author name (defaults to your system username).
+
+```bash
+? Author: John Doe
+```
+
+### 4. Qt Binding
+
+Select which Qt Python binding to use:
+
+- **PySide6** (recommended, default)
+- PySide2
+- PyQt6
+- PyQt5
+
+```bash
+? Select your Qt binding [PyQt5/PyQt6/PySide2/PySide6] (PySide6):
+> PySide6
+```
+
+<Check>
+PPG automatically checks if the selected binding is installed. If not, it installs it using pip.
+</Check>
+
+### 5. Mac Bundle Identifier
+
+For macOS apps, specify a unique bundle identifier (e.g., `com.author.appname`).
+
+```bash
+? Mac bundle identifier (e.g. com.john.myawesomeapp, optional): com.john.myawesomeapp
+```
+
+## Configuration Confirmation
+
+Before creating the project, PPG displays a summary table:
+
+```
+┌─────────────────────── Please confirm your settings ───────────────────────┐
+│                                                                            │
+│ App name:              MyAwesomeApp                                        │
+│ Version:               1.0.0                                               │
+│ Author:                John Doe                                            │
+│ Qt binding:            PySide6                                             │
+│ Mac bundle identifier: com.john.myawesomeapp                               │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+? Continue? (Y/n)
+```
+
+## Project Structure Created
+
+After confirmation, `ppg init` creates the following structure:
+
+```
+project-root/
+├── src/
+│   ├── build/
+│   │   └── settings/
+│   │       ├── base.json       # Core settings
+│   │       ├── mac.json        # macOS-specific settings
+│   │       ├── linux.json      # Linux-specific settings
+│   │       └── windows.json    # Windows-specific settings
+│   └── main/
+│       ├── python/
+│       │   └── main.py         # Application entry point
+│       ├── icons/
+│       │   └── Icon.ico        # App icons
+│       └── resources/          # Additional resources
+```
+
+## Generated Configuration
+
+The `src/build/settings/base.json` file is populated with your choices:
+
+```json
+{
+  "app_name": "MyAwesomeApp",
+  "author": "John Doe",
+  "version": "1.0.0",
+  "binding": "PySide6",
+  "main_module": "src/main/python/main.py",
+  "hidden_imports": [
+    "__future__"
+  ]
+}
+```
+
+## Example Session
+
+Here's what a complete initialization looks like:
+
+```bash
+$ ppg init
+
+✨ Welcome to PPG v2.0.0 ✨
+
+Let's create a new project! This will create a src/ directory with the necessary files and folders.
+
+? App name: TaskManager
+? Version: 1.0.0
+? Author: John Doe
+? Select your Qt binding [PyQt5/PyQt6/PySide2/PySide6] (PySide6): PySide6
+? Mac bundle identifier (e.g. com.john.taskmanager, optional): com.john.taskmanager
+
+┌─────────────────────── Please confirm your settings ───────────────────────┐
+│ App name:              TaskManager                                         │
+│ Version:               1.0.0                                               │
+│ Author:                John Doe                                            │
+│ Qt binding:            PySide6                                             │
+│ Mac bundle identifier: com.john.taskmanager                                │
+└────────────────────────────────────────────────────────────────────────────┘
+
+? Continue? Yes
+
+🔎 Checking if PySide6 is installed...
+✅ PySide6 is installed!
+
+🎉 Created the src/ directory 🎉. If you have PySide6 installed, you can now do:
+
+    ppg start
+```
+
+## Auto-Installation of Qt Bindings
+
+If the selected Qt binding is not installed, PPG automatically installs it:
+
+```bash
+🔎 Checking if PySide6 is installed...
+🛠️ Installing PySide6...
+
+Collecting PySide6
+  Downloading PySide6-6.6.1-cp311-cp311-macosx_11_0_arm64.whl
+Installing collected packages: PySide6
+Successfully installed PySide6-6.6.1
+
+✅ PySide6 is installed!
+```
+
+## Error Handling
+
+### Project Already Exists
+
+```bash
+$ ppg init
+
+💔 Error: The src/ directory already exists.
+Aborting.
+```
+
+### Installation Failure
+
+If the Qt binding installation fails:
+
+```bash
+❌ Failed to install PySide6. Please check your internet connection and permissions, and try again.
+```
+
+## Implementation Details
+
+The `init` command (from `builtin_commands/__init__.py:55-162`):
+
+1. **Validates** that `src/` doesn't exist
+2. **Prompts** for configuration values
+3. **Displays** a confirmation table  
+4. **Checks** if the Qt binding is installed
+5. **Installs** the binding if missing
+6. **Creates** the `src/` directory structure
+7. **Copies** template files with variable substitution
+8. **Generates** `base.json` with your settings
+
+## Next Steps
+
+After initialization, you can:
+
+<CardGroup cols={2}>
+  <Card title="Run Your App" icon="play" href="/cli/start">
+    Start your application in development mode
+  </Card>
+  <Card title="Create Components" icon="code" href="/cli/create">
+    Generate components and views
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg start](/cli/start) - Run your app from source
+- [ppg create](/cli/create) - Generate components and views
+- [Project Structure](/guides/project-structure) - Understanding the file layout

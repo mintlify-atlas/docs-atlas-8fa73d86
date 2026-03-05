@@ -1,0 +1,545 @@
+---
+title: Packaging & Distribution
+description: Build standalone executables and installers for Windows, macOS, and Linux
+---
+
+PPG makes it easy to package your Python application into standalone executables and installers for all major platforms. No Python installation required on user machines.
+
+## Overview
+
+PPG uses PyInstaller under the hood to bundle your application, dependencies, and the Python interpreter into a single distributable package. The process is streamlined with simple commands:
+
+```bash
+# Create standalone executable
+ppg freeze
+
+# Create installer
+ppg installer
+```
+
+## The Freeze Process
+
+<Steps>
+  <Step title="Prepare your application">
+    Before freezing, ensure:
+    - All dependencies are in `requirements/base.txt` (and platform-specific files)
+    - Build settings are configured in `src/build/settings/base.json`
+    - Icons are in place in `src/main/icons/`
+    - Resources are in `src/main/resources/`
+
+    ```json
+    // src/build/settings/base.json
+    {
+        "app_name": "MyApp",
+        "author": "Your Name",
+        "main_module": "src/main/python/main.py",
+        "version": "1.0.0"
+    }
+    ```
+  </Step>
+
+  <Step title="Run ppg freeze">
+    ```bash
+    # Freeze for your current platform
+    ppg freeze
+
+    # Debug mode (shows PyInstaller output)
+    ppg freeze --debug
+    ```
+
+    This creates a standalone application in `target/<YourApp>/`:
+    - **Windows**: `target/MyApp/MyApp.exe`
+    - **macOS**: `target/MyApp.app`
+    - **Linux**: `target/MyApp/MyApp`
+  </Step>
+
+  <Step title="Test the frozen application">
+    ```bash
+    # Windows
+    target\MyApp\MyApp.exe
+
+    # macOS
+    open target/MyApp.app
+
+    # Linux
+    ./target/MyApp/MyApp
+    ```
+
+    Make sure all features work correctly. Check:
+    - Application starts without errors
+    - Resources load properly
+    - All dependencies are included
+    - Icons display correctly
+  </Step>
+</Steps>
+
+## Platform-Specific Considerations
+
+<Accordion title="Windows">
+  ### Windows Executable
+
+  PPG handles Windows-specific requirements automatically:
+  - Creates `.exe` with embedded icon
+  - Bundles required Visual C++ DLLs
+  - Adds version information
+  - Optionally hides console window
+
+  **Hide Console Window:**
+  ```json
+  // src/build/settings/base.json
+  {
+      "show_console_window": false
+  }
+  ```
+
+  **Version Information:**
+  Create `src/freeze/windows/version_info.py`:
+  ```python
+  VSVersionInfo(
+    ffi=FixedFileInfo(
+      filevers=(1, 0, 0, 0),
+      prodvers=(1, 0, 0, 0),
+      mask=0x3f,
+      flags=0x0,
+      OS=0x40004,
+      fileType=0x1,
+      subtype=0x0,
+      date=(0, 0)
+    ),
+    kids=[
+      StringFileInfo([
+        StringTable('040904B0', [
+          StringStruct('CompanyName', 'Your Company'),
+          StringStruct('FileDescription', 'My Application'),
+          StringStruct('FileVersion', '1.0.0'),
+          StringStruct('ProductName', 'MyApp'),
+          StringStruct('ProductVersion', '1.0.0')
+        ])
+      ]),
+      VarFileInfo([VarStruct('Translation', [1033, 1200])])
+    ]
+  )
+  ```
+
+  **Required DLLs:**
+  PPG automatically includes:
+  - `python3X.dll`
+  - `msvcr100.dll`, `msvcr110.dll`, `msvcp110.dll`
+  - `vcruntime140.dll`, `msvcp140.dll`, `concrt140.dll`
+  - Universal CRT DLLs (`api-ms-win-crt-*.dll`)
+</Accordion>
+
+<Accordion title="macOS">
+  ### macOS Application Bundle
+
+  PPG creates a standard `.app` bundle with:
+  - Application executable
+  - Resources in `Contents/Resources/`
+  - Icons in multiple resolutions
+  - Info.plist with metadata
+
+  **Bundle Identifier:**
+  ```json
+  // src/build/settings/mac.json
+  {
+      "mac_bundle_identifier": "com.yourcompany.myapp"
+  }
+  ```
+
+  **Code Signing (Optional):**
+  ```bash
+  # Sign the application
+  codesign --deep --force --sign "Developer ID Application: Your Name" target/MyApp.app
+
+  # Verify signature
+  codesign --verify --deep --strict target/MyApp.app
+  spctl -a -v target/MyApp.app
+  ```
+
+  **Notarization (for distribution outside Mac App Store):**
+  ```bash
+  # Create a DMG first
+  ppg installer
+
+  # Submit for notarization
+  xcrun notarytool submit target/MyApp.dmg \
+    --apple-id your@email.com \
+    --team-id TEAMID \
+    --password app-specific-password \
+    --wait
+
+  # Staple the notarization
+  xcrun stapler staple target/MyApp.dmg
+  ```
+</Accordion>
+
+<Accordion title="Linux">
+  ### Linux Executable
+
+  Linux builds create a directory containing:
+  - Main executable
+  - Shared libraries
+  - Resources
+
+  **Distribution Formats:**
+  PPG supports multiple Linux distributions:
+  - Ubuntu/Debian (`.deb`)
+  - Fedora (`.rpm`)
+  - Arch Linux (`.pkg.tar.xz`)
+  - Generic (`.tar.gz`)
+
+  **AppImage (Recommended):**
+  For maximum compatibility, create an AppImage:
+  ```bash
+  # Install AppImage tools
+  wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+  chmod +x appimagetool-x86_64.AppImage
+
+  # Create AppDir structure
+  mkdir -p MyApp.AppDir/usr/bin
+  cp -r target/MyApp/* MyApp.AppDir/usr/bin/
+
+  # Add desktop file and icon
+  cp MyApp.desktop MyApp.AppDir/
+  cp icon.png MyApp.AppDir/
+
+  # Build AppImage
+  ./appimagetool-x86_64.AppImage MyApp.AppDir
+  ```
+</Accordion>
+
+## Creating Installers
+
+After freezing, create installers for easy distribution:
+
+```bash
+ppg installer
+```
+
+### Windows Installer (NSIS)
+
+Creates a `.exe` installer with:
+- Welcome screen
+- License agreement
+- Installation directory selection
+- Start menu shortcuts
+- Uninstaller
+
+**Customize installer:**
+Create `src/freeze/windows/installer.nsi`:
+```nsis
+!define PRODUCT_NAME "MyApp"
+!define PRODUCT_VERSION "1.0.0"
+!define PRODUCT_PUBLISHER "Your Company"
+
+Name "${PRODUCT_NAME}"
+OutFile "MyAppSetup.exe"
+InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
+
+Section "MainSection" SEC01
+  SetOutPath "$INSTDIR"
+  File /r "target\MyApp\*.*"
+  CreateShortcut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\MyApp.exe"
+SectionEnd
+```
+
+### macOS Installer (DMG)
+
+Creates a `.dmg` disk image with:
+- Drag-to-Applications folder
+- Custom background image
+- Volume icon
+
+**Customize DMG appearance:**
+```bash
+# PPG uses create-dmg under the hood
+# Customize in src/freeze/mac/dmg-settings.json
+{
+  "window_size": {"width": 600, "height": 400},
+  "icon_size": 128,
+  "background": "background.png"
+}
+```
+
+### Linux Packages
+
+```bash
+# Debian/Ubuntu
+ppg installer --format deb
+
+# Fedora/RHEL
+ppg installer --format rpm
+
+# Arch Linux
+ppg installer --format pkg
+```
+
+## PyInstaller Configuration
+
+### Hidden Imports
+
+If PyInstaller misses some imports, add them to settings:
+
+```json
+// src/build/settings/base.json
+{
+  "hidden_imports": [
+    "pkg_resources.py2_warn",
+    "pydantic",
+    "sqlalchemy.dialects.postgresql"
+  ]
+}
+```
+
+### Extra PyInstaller Arguments
+
+```json
+{
+  "extra_pyinstaller_args": [
+    "--exclude-module", "tkinter",
+    "--exclude-module", "matplotlib"
+  ]
+}
+```
+
+### Binary Hooks
+
+For complex dependencies, create PyInstaller hooks in `hooks/`:
+
+```python
+# hooks/hook-mypackage.py
+from PyInstaller.utils.hooks import collect_all
+
+datas, binaries, hiddenimports = collect_all('mypackage')
+```
+
+## Resources and Data Files
+
+Resources in `src/main/resources/` are automatically copied to the frozen app:
+
+```python
+# Access resources the same way in frozen and unfrozen apps
+html_path = self.get_resource("index.html")
+image_path = self.get_resource("logo.png")
+```
+
+### Platform-Specific Resources
+
+```
+src/main/resources/
+├── base/           # All platforms
+│   └── config.json
+├── linux/          # Linux only
+│   └── theme.css
+├── mac/            # macOS only
+│   └── menu.json
+└── windows/        # Windows only
+    └── registry.reg
+```
+
+## File Filtering
+
+PPG can replace placeholders in resource files during freezing:
+
+```json
+// src/build/settings/base.json
+{
+  "files_to_filter": [
+    "config.json",
+    "about.html"
+  ]
+}
+```
+
+```json
+// config.json (before freezing)
+{
+  "app_name": "${app_name}",
+  "version": "${version}",
+  "author": "${author}"
+}
+
+// config.json (after freezing)
+{
+  "app_name": "MyApp",
+  "version": "1.0.0",
+  "author": "Your Name"
+}
+```
+
+## Debugging Frozen Applications
+
+### Enable Debug Mode
+
+```bash
+ppg freeze --debug
+```
+
+This:
+- Shows PyInstaller output
+- Includes debug symbols
+- Enables console window (Windows)
+- Creates detailed logs
+
+### Check What's Included
+
+```bash
+# List files in frozen app
+ls -R target/MyApp/
+
+# Check for missing dependencies
+ldd target/MyApp/MyApp  # Linux
+otool -L target/MyApp.app/Contents/MacOS/MyApp  # macOS
+```
+
+### Common Issues
+
+<Accordion title="Import errors on startup">
+  **Error:** `ModuleNotFoundError: No module named 'xyz'`
+
+  **Solution:** Add to `hidden_imports`:
+  ```json
+  {
+    "hidden_imports": ["xyz"]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Resources not found">
+  **Error:** `FileNotFoundError: Could not find resource 'file.png'`
+
+  **Solution:** Ensure resources are in `src/main/resources/` and you're using `get_resource()`:
+  ```python
+  # ❌ Wrong
+  path = "resources/file.png"
+
+  # ✅ Correct
+  path = self.get_resource("file.png")
+  ```
+</Accordion>
+
+<Accordion title="Large executable size">
+  **Problem:** Frozen app is 200+ MB
+
+  **Solution:** Exclude unnecessary modules:
+  ```json
+  {
+    "extra_pyinstaller_args": [
+      "--exclude-module", "tkinter",
+      "--exclude-module", "matplotlib",
+      "--exclude-module", "numpy.testing"
+    ]
+  }
+  ```
+</Accordion>
+
+## Distribution Checklist
+
+<Steps>
+  <Step title="Update version number">
+    ```json
+    // src/build/settings/base.json
+    {
+      "version": "1.0.0"
+    }
+    ```
+  </Step>
+
+  <Step title="Remove development code">
+    - Disable hot reloading
+    - Remove debug logging
+    - Remove test code
+    - Check for hardcoded paths
+  </Step>
+
+  <Step title="Test frozen build">
+    - Install and run on clean VM
+    - Test all features
+    - Check resource loading
+    - Verify update mechanism (if any)
+  </Step>
+
+  <Step title="Code signing">
+    - Windows: Sign with Authenticode certificate
+    - macOS: Sign with Developer ID and notarize
+    - Linux: Sign packages with GPG (optional)
+  </Step>
+
+  <Step title="Create installer">
+    ```bash
+    ppg installer
+    ```
+    Test the installer on a clean system.
+  </Step>
+
+  <Step title="Prepare distribution">
+    - Write release notes
+    - Update documentation
+    - Create download page
+    - Set up update server (if applicable)
+  </Step>
+</Steps>
+
+## Continuous Integration
+
+Automate builds with CI/CD:
+
+```yaml
+# .github/workflows/build.yml
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements/base.txt
+      - run: pip install -r requirements/windows.txt
+      - run: ppg freeze
+      - run: ppg installer
+      - uses: actions/upload-artifact@v2
+        with:
+          name: windows-installer
+          path: target/MyAppSetup.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements/base.txt
+      - run: pip install -r requirements/mac.txt
+      - run: ppg freeze
+      - run: ppg installer
+      - uses: actions/upload-artifact@v2
+        with:
+          name: macos-dmg
+          path: target/MyApp.dmg
+```
+
+## Best Practices
+
+1. **Test on clean systems**: Always test frozen builds on machines without Python installed
+2. **Keep builds small**: Exclude unnecessary dependencies
+3. **Version everything**: Update version numbers before each release
+4. **Sign your code**: Use code signing certificates for trust
+5. **Automate builds**: Use CI/CD for consistent builds
+6. **Document requirements**: List minimum OS versions and dependencies
+7. **Provide checksums**: Include SHA256 hashes for downloads
+
+<Note>
+  The frozen application is completely standalone. Users don't need Python installed. All dependencies are bundled into the executable.
+</Note>
+
+## Next Steps
+
+- [Project Structure](/guides/project-structure) - Organize your project for easy packaging
+- [Creating Components](/guides/creating-components) - Build modular, testable components
+- [Working with Pydux](/guides/working-with-pydux) - Manage application state effectively

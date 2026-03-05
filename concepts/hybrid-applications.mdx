@@ -1,0 +1,561 @@
+---
+title: Hybrid Applications
+description: Build modern desktop apps combining native Qt widgets with web-based UIs
+---
+
+## Overview
+
+PPG provides **first-class support for hybrid applications** that seamlessly combine native Qt widgets with modern web UIs. You can build parts of your application using web technologies (React, Vue, HTML/CSS/JS) while leveraging native Qt widgets for performance-critical components.
+
+<Note>
+Hybrid applications enable you to use the best tool for each part of your app: native widgets for performance, web UIs for rapid development and modern interfaces.
+</Note>
+
+## Why Hybrid Applications?
+
+<Steps>
+  <Step title="Leverage Web Technologies">
+    Use familiar web frameworks like React or Vue for rapid UI development.
+  </Step>
+  
+  <Step title="Native Performance">
+    Keep performance-critical components as native Qt widgets.
+  </Step>
+  
+  <Step title="Rich Ecosystems">
+    Access the vast ecosystem of web libraries and components.
+  </Step>
+  
+  <Step title="Unified State Management">
+    Both native and web components can share the same Pydux state.
+  </Step>
+  
+  <Step title="Consistent Lifecycle">
+    Web components follow the same PPGLifeCycle patterns as native components.
+  </Step>
+</Steps>
+
+## WebEngineBridge
+
+The `WebEngineBridge` class enables **bidirectional communication** between Python and JavaScript:
+
+```python
+from ppg_runtime.application_context import WebEngineBridge
+from PySide6.QtCore import QObject, Signal, Slot
+import json
+
+class WebEngineBridge(QObject):
+    bridge = Signal(str)
+    
+    def __init__(self):
+        super().__init__()
+        self.handlers = {}
+    
+    def register_handler(self, event_name, func):
+        """Register a Python function to handle events from JavaScript"""
+        self.handlers[event_name] = func
+    
+    @Slot(str, result=str)
+    def send(self, message_json):
+        """Receive messages from JavaScript and call appropriate handler"""
+        message = json.loads(message_json)
+        event = message.get("event")
+        payload = message.get("payload")
+        
+        if event in self.handlers:
+            result = self.handlers[event](payload)
+            return json.dumps({"success": True, "data": result})
+        else:
+            return json.dumps({"success": False, "error": f"Handler not found"})
+    
+    def emit_to_ui(self, event, payload):
+        """Emit an event to JavaScript with the given payload"""
+        message = json.dumps({"event": event, "payload": payload})
+        self.bridge.emit(message)
+```
+
+## BridgeManager
+
+The `BridgeManager` class simplifies bridge setup and management:
+
+```python
+from ppg_runtime.application_context import BridgeManager
+from PySide6.QtWebChannel import QWebChannel
+
+class BridgeManager:
+    _instances = []
+    
+    def __init__(self, webview, channel_name="bridge"):
+        """Create a bridge for the given QWebEngineView"""
+        self.webview = webview
+        self.bridge = WebEngineBridge()
+        
+        # Set up QWebChannel
+        self.channel = QWebChannel()
+        self.channel.registerObject(channel_name, self.bridge)
+        self.webview.page().setWebChannel(self.channel)
+        
+        BridgeManager._instances.append(self)
+    
+    def register(self, event, func):
+        """Register a Python handler for JavaScript events"""
+        self.bridge.register_handler(event, func)
+    
+    def emit(self, event, payload):
+        """Send an event to this instance's JavaScript UI"""
+        self.bridge.emit_to_ui(event, payload)
+    
+    @classmethod
+    def emit_all(cls, event, payload):
+        """Send an event to all bridge instances"""
+        for instance in cls._instances:
+            instance.bridge.emit_to_ui(event, payload)
+```
+
+## Basic Setup
+
+Here's a minimal hybrid application:
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle, BridgeManager
+from PySide6.QtWidgets import QMainWindow, QPushButton
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtCore import QUrl
+
+@init_lifecycle
+class HybridApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Create embedded browser
+        self.webview = QWebEngineView(self)
+        self.webview.load(QUrl.fromLocalFile(self.get_resource("index.html")))
+        
+        # Create bridge for Python ↔ JavaScript communication
+        self.bridge = BridgeManager(self.webview, "bridge")
+        
+        # Register event handler
+        self.bridge.register("login", self.handle_login)
+        
+        # Set as central widget
+        self.setCentralWidget(self.webview)
+        
+        # Optional: Add native Qt buttons
+        self.native_btn = QPushButton("Native Button", self)
+        self.native_btn.clicked.connect(self.send_to_web)
+    
+    def handle_login(self, payload):
+        """Handle login event from JavaScript"""
+        username = payload['username']
+        password = payload['password']
+        
+        # Perform authentication
+        if self.authenticate(username, password):
+            return {"success": True, "message": "Login successful"}
+        else:
+            return {"success": False, "message": "Invalid credentials"}
+    
+    def send_to_web(self):
+        """Send event from Python to JavaScript"""
+        self.bridge.emit("notification", {
+            "message": "Hello from Python!",
+            "timestamp": "2024-01-01T12:00:00"
+        })
+    
+    def responsive_UI(self):
+        self.setMinimumSize(800, 600)
+        self.native_btn.move(10, 10)
+```
+
+## QWebChannel Setup
+
+On the JavaScript side, you need to set up QWebChannel:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hybrid App</title>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+</head>
+<body>
+    <h1>Hybrid Application</h1>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <div id="status"></div>
+    
+    <script>
+        let bridge;
+        
+        // Initialize QWebChannel
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+            bridge = channel.objects.bridge;
+            
+            // Listen for events from Python
+            bridge.bridge.connect(function(message) {
+                const data = JSON.parse(message);
+                handlePythonEvent(data.event, data.payload);
+            });
+        });
+        
+        // Send event to Python
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const message = JSON.stringify({
+                event: 'login',
+                payload: { username, password }
+            });
+            
+            // Call Python handler and get response
+            const response = JSON.parse(bridge.send(message));
+            
+            if (response.success) {
+                document.getElementById('status').textContent = response.data.message;
+            } else {
+                document.getElementById('status').textContent = 'Error: ' + response.error;
+            }
+        }
+        
+        // Handle events from Python
+        function handlePythonEvent(event, payload) {
+            if (event === 'notification') {
+                alert(payload.message);
+            }
+        }
+    </script>
+</body>
+</html>
+```
+
+## Complete Example
+
+Here's the complete hybrid application from the PPG examples:
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle, BridgeManager
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.utils import app_is_frozen
+from PySide6.QtWidgets import QMainWindow, QPushButton
+from PySide6.QtCore import QUrl
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage
+
+@init_lifecycle
+@hot_reloading
+class HybridApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Load embedded browser with web UI
+        self.engine = QWebEngineView(self)
+        self.engine.load(QUrl.fromLocalFile(self.get_resource("index.html")))
+        
+        # Create bridge for Python ↔ JavaScript communication
+        self.bridge = BridgeManager(self.engine, "bridge")
+        
+        # Register event called "callback"
+        # When triggered from JS, it calls handle_callback() in Python
+        self.bridge.register("callback", self.handle_callback)
+        
+        # Add native buttons
+        self.button = QPushButton("Open DevTools", self, clicked=self.open_dev_tools)
+        self.button2 = QPushButton(
+            "Test Emit",
+            self,
+            clicked=lambda: self.bridge.emit("callback", {"data": "Hello from Python!"})
+        )
+        
+        self.setCentralWidget(self.engine)
+    
+    def handle_callback(self, payload):
+        """Handle messages from JavaScript via the bridge
+        
+        Args:
+            payload (dict): The payload data sent from JavaScript
+        
+        Returns:
+            str: A response message
+        """
+        print("Received message from JS:", payload)
+        
+        # Send response back to JavaScript
+        return f"USER: {payload['username']} logged in successfully! (handled by Python)"
+    
+    def open_dev_tools(self):
+        """Opens the DevTools window for the embedded web engine"""
+        self.dev_tools = QWebEngineView(self)
+        if not self.engine.page().devToolsPage():
+            self.engine.page().setDevToolsPage(
+                QWebEnginePage(self.engine.page().profile(), self.dev_tools)
+            )
+        self.dev_tools.setPage(self.engine.page().devToolsPage())
+        self.dev_tools.setWindowTitle("DevTools")
+        self.dev_tools.show()
+        self.dev_tools.resize(500, self.height())
+        self.dev_tools.move(self.width() - 500, 0)
+        
+        # Emit event to JavaScript
+        self.bridge.emit("devtools_opened", {"message": "DevTools opened"})
+    
+    def responsive_UI(self):
+        self.setMinimumSize(640, 480)
+        self.button2.move(100, 0)
+
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = HybridApp()
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+## Communication Patterns
+
+### Python → JavaScript
+
+Send events from Python to update the web UI:
+
+```python
+def update_user_status(self, status):
+    # Emit to specific bridge instance
+    self.bridge.emit("user_status_changed", {
+        "status": status,
+        "timestamp": datetime.now().isoformat()
+    })
+
+def broadcast_notification(self, message):
+    # Emit to ALL bridge instances
+    BridgeManager.emit_all("notification", {
+        "message": message,
+        "type": "info"
+    })
+```
+
+### JavaScript → Python
+
+Call Python functions from JavaScript:
+
+```javascript
+// Synchronous call with response
+function fetchUserData(userId) {
+    const message = JSON.stringify({
+        event: 'get_user',
+        payload: { userId }
+    });
+    
+    const response = JSON.parse(bridge.send(message));
+    
+    if (response.success) {
+        return response.data;
+    } else {
+        console.error('Error:', response.error);
+        return null;
+    }
+}
+
+// Async operation
+async function saveUserData(userData) {
+    const message = JSON.stringify({
+        event: 'save_user',
+        payload: userData
+    });
+    
+    const response = JSON.parse(bridge.send(message));
+    return response;
+}
+```
+
+## Integrating with Pydux
+
+Share state between native widgets and web UI:
+
+```python
+from pydantic import BaseModel
+
+class UserModel(BaseModel):
+    name: str = ""
+    email: str = ""
+    isLoggedIn: bool = False
+
+@init_lifecycle
+class HybridApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Define shared state
+        self.set_schema({
+            "user": UserModel,
+            "notifications": list
+        })
+    
+    def render_(self):
+        self.webview = QWebEngineView(self)
+        self.webview.load(QUrl.fromLocalFile(self.get_resource("index.html")))
+        
+        self.bridge = BridgeManager(self.webview)
+        self.bridge.register("login", self.handle_login)
+        self.bridge.register("get_state", self.get_current_state)
+        
+        self.setCentralWidget(self.webview)
+    
+    def handle_login(self, payload):
+        # Update Pydux state
+        self.update_nested_model("user", {
+            "name": payload['username'],
+            "email": payload['email'],
+            "isLoggedIn": True
+        })
+        
+        return {"success": True}
+    
+    def get_current_state(self, payload):
+        # Return current state to JavaScript
+        return self.store
+    
+    def on_store_change(self, store):
+        # Sync state changes to web UI
+        self.bridge.emit("state_updated", {
+            "user": self.get_nested("user"),
+            "notifications": self.store.get("notifications", [])
+        })
+```
+
+## Using Web Frameworks
+
+### React Integration
+
+```jsx
+import React, { useState, useEffect } from 'react';
+
+function App() {
+    const [user, setUser] = useState(null);
+    const [bridge, setBridge] = useState(null);
+    
+    useEffect(() => {
+        // Initialize QWebChannel
+        new QWebChannel(qt.webChannelTransport, (channel) => {
+            const bridgeObj = channel.objects.bridge;
+            setBridge(bridgeObj);
+            
+            // Listen for events from Python
+            bridgeObj.bridge.connect((message) => {
+                const data = JSON.parse(message);
+                if (data.event === 'state_updated') {
+                    setUser(data.payload.user);
+                }
+            });
+        });
+    }, []);
+    
+    const handleLogin = async (username, password) => {
+        const message = JSON.stringify({
+            event: 'login',
+            payload: { username, password }
+        });
+        
+        const response = JSON.parse(bridge.send(message));
+        if (response.success) {
+            setUser(response.data.user);
+        }
+    };
+    
+    return (
+        <div>
+            <h1>Hybrid React App</h1>
+            {user ? (
+                <div>Welcome, {user.name}!</div>
+            ) : (
+                <LoginForm onLogin={handleLogin} />
+            )}
+        </div>
+    );
+}
+```
+
+## DevTools Support
+
+Open Chrome DevTools for debugging your web UI:
+
+```python
+def open_dev_tools(self):
+    """Opens Chrome DevTools for the web UI"""
+    self.dev_tools = QWebEngineView()
+    
+    # Create DevTools page if it doesn't exist
+    if not self.webview.page().devToolsPage():
+        dev_page = QWebEnginePage(
+            self.webview.page().profile(),
+            self.dev_tools
+        )
+        self.webview.page().setDevToolsPage(dev_page)
+    
+    # Show DevTools window
+    self.dev_tools.setPage(self.webview.page().devToolsPage())
+    self.dev_tools.setWindowTitle("DevTools")
+    self.dev_tools.show()
+    self.dev_tools.resize(800, 600)
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Bridges for Communication Only">
+    Don't pass large data through bridges. Store data in Pydux and sync only what's needed.
+  </Step>
+  
+  <Step title="Handle Errors Gracefully">
+    Always wrap bridge handlers in try-catch blocks and return meaningful error messages.
+  </Step>
+  
+  <Step title="Minimize Bridge Calls">
+    Batch updates and debounce frequent events to reduce overhead.
+  </Step>
+  
+  <Step title="Use QWebChannel Correctly">
+    Load qwebchannel.js before attempting to create bridges.
+  </Step>
+  
+  <Step title="Clean Up Resources">
+    Call `bridge.close()` when destroying web views to prevent memory leaks.
+  </Step>
+</Steps>
+
+## Multiple Bridges
+
+You can create multiple bridges for different web views:
+
+```python
+def render_(self):
+    # Main app web view
+    self.main_view = QWebEngineView(self)
+    self.main_bridge = BridgeManager(self.main_view, "mainBridge")
+    self.main_bridge.register("main_action", self.handle_main_action)
+    
+    # Settings web view
+    self.settings_view = QWebEngineView(self)
+    self.settings_bridge = BridgeManager(self.settings_view, "settingsBridge")
+    self.settings_bridge.register("save_settings", self.handle_save_settings)
+    
+    # Emit to specific bridge
+    self.main_bridge.emit("update", {"data": "main data"})
+    self.settings_bridge.emit("update", {"data": "settings data"})
+    
+    # Or broadcast to all bridges
+    BridgeManager.emit_all("global_event", {"data": "for everyone"})
+```
+
+## Next Steps
+
+- Review [Component Architecture](/concepts/component-architecture) fundamentals
+- Master [State Management](/concepts/state-management) with Pydux
+- Explore [Reactive Widgets](/concepts/reactive-widgets) for native UIs

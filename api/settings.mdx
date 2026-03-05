@@ -1,0 +1,255 @@
+---
+title: 'Settings API'
+description: 'Access and manage PPG build settings'
+icon: 'gear'
+---
+
+## Overview
+
+PPG uses settings from JSON files in `src/build/settings/` to configure your build. The `ppg` module provides a global `SETTINGS` dictionary and functions to manage settings programmatically.
+
+## SETTINGS
+
+Global dictionary containing all loaded build settings.
+
+```python
+from ppg import SETTINGS
+
+app_name = SETTINGS['app_name']
+freeze_dir = SETTINGS['freeze_dir']
+```
+
+Settings are loaded from:
+- `src/build/settings/base.json` - Base settings for all platforms
+- `src/build/settings/{platform}.json` - Platform-specific settings (mac, linux, windows)
+- `src/build/settings/{profile}.json` - Profile-specific settings (e.g., release.json)
+
+### Common Settings
+
+- `app_name` - Your application name
+- `author` - Application author
+- `version` - Application version
+- `main_module` - Entry point module
+- `freeze_dir` - Output directory for frozen builds
+- `hidden_imports` - Python modules to include
+
+## init()
+
+Initialize PPG settings when not using the command line.
+
+```python
+from ppg import init
+
+init('/path/to/project')
+```
+
+<ParamField path="project_dir" type="str" required>
+  Absolute or relative path to your project directory containing `src/build/settings/`
+</ParamField>
+
+<Note>
+You only need to call `init()` if you're not using the `ppg` command line tool or `ppg.cmdline.main()`. The CLI automatically initializes settings.
+</Note>
+
+### Example
+
+```python
+from ppg import init, SETTINGS
+from os.path import abspath
+
+# Initialize PPG for your project
+init(abspath('.'))
+
+# Access settings
+print(f"Building {SETTINGS['app_name']} v{SETTINGS['version']}")
+```
+
+## activate_profile()
+
+Load additional settings from a profile file.
+
+```python
+from ppg import activate_profile
+
+activate_profile('release')
+```
+
+<ParamField path="profile_name" type="str" required>
+  Name of the profile to load (without `.json` extension). Loads `src/build/settings/{profile_name}.json`
+</ParamField>
+
+### How It Works
+
+By default, PPG loads:
+- `base.json` - Always loaded
+- `{os}.json` - Platform-specific (mac, linux, or windows)
+
+Profiles let you load additional settings. For example, a `release.json` profile might contain:
+
+```json
+{
+    "server_url": "https://production.example.com",
+    "debug": false
+}
+```
+
+### Example
+
+```python
+from ppg import activate_profile, SETTINGS
+
+# Load release profile
+activate_profile('release')
+
+# Now SETTINGS includes values from release.json
+print(SETTINGS['server_url'])  # https://production.example.com
+```
+
+## path()
+
+Get the absolute path to a file or directory in your project.
+
+```python
+from ppg import path
+
+src_path = path('src/main/python')
+icon_path = path('src/main/icons/Icon.png')
+```
+
+<ParamField path="path_str" type="str" required>
+  Relative path from the project directory. Use forward slashes `/` even on Windows. Supports placeholders like `${freeze_dir}`.
+</ParamField>
+
+**Returns:** `str` - Absolute path to the file or directory
+
+### Placeholder Expansion
+
+You can use placeholders to refer to settings:
+
+```python
+from ppg import path
+
+# Using placeholder
+freeze_path = path('${freeze_dir}/MyApp')
+
+# Equivalent to:
+freeze_path = path('target/MyApp')  # if freeze_dir is "target"
+```
+
+### Example
+
+```python
+from ppg import path, init
+import os
+
+init('.')
+
+# Get paths in your project
+resources = path('src/main/resources')
+if os.path.exists(resources):
+    print(f"Resources found at: {resources}")
+
+# Use with settings placeholders
+output = path('${freeze_dir}/${app_name}')
+print(f"Build output: {output}")
+```
+
+## Settings File Structure
+
+### base.json
+
+Core settings shared across all platforms:
+
+```json
+{
+    "app_name": "MyApp",
+    "author": "Your Name",
+    "version": "1.0.0",
+    "main_module": "myapp.main:main",
+    "freeze_dir": "target/${app_name}"
+}
+```
+
+### Platform Files
+
+Create `mac.json`, `linux.json`, or `windows.json` for platform-specific settings:
+
+```json
+{
+    "hidden_imports": ["AppKit"],
+    "resources": ["src/main/resources/mac"]
+}
+```
+
+### Profile Files
+
+Create custom profiles like `release.json` or `dev.json`:
+
+```json
+{
+    "server_url": "https://api.production.com",
+    "api_key": "${PROD_API_KEY}"
+}
+```
+
+## Placeholder Expansion
+
+Placeholders use the syntax `${setting_name}` and are expanded recursively:
+
+```json
+{
+    "app_name": "MyApp",
+    "freeze_dir": "target/${app_name}",
+    "installer_dir": "${freeze_dir}/installer"
+}
+```
+
+Results in:
+- `freeze_dir` = `"target/MyApp"`
+- `installer_dir` = `"target/MyApp/installer"`
+
+### List Merging
+
+When multiple files define the same list setting, they are merged:
+
+**base.json:**
+```json
+{ "hidden_imports": ["requests"] }
+```
+
+**mac.json:**
+```json
+{ "hidden_imports": ["AppKit"] }
+```
+
+**Result:**
+```python
+SETTINGS['hidden_imports']  # ["requests", "AppKit"]
+```
+
+## Complete Example
+
+```python
+from ppg import init, activate_profile, path, SETTINGS
+import os
+
+# Initialize for current directory
+init('.')
+
+print(f"App: {SETTINGS['app_name']}")
+print(f"Version: {SETTINGS['version']}")
+
+# Load release settings
+if os.getenv('BUILD_RELEASE'):
+    activate_profile('release')
+    print("Release mode enabled")
+
+# Get project paths
+src_dir = path('src/main/python')
+resources = path('src/main/resources')
+output = path('${freeze_dir}')
+
+print(f"Source: {src_dir}")
+print(f"Resources: {resources}")
+print(f"Output: {output}")
+```

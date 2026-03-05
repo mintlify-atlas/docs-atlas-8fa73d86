@@ -1,0 +1,307 @@
+---
+title: ppg start
+description: Run your application from source in development mode
+---
+
+## Overview
+
+The `ppg start` command runs your PPG application directly from source code without compilation. This is the primary command used during development, enabling rapid iteration and testing.
+
+```bash
+ppg start
+```
+
+<Info>
+This command automatically configures the Python environment with the correct `PYTHONPATH` to ensure your application can import its modules correctly.
+</Info>
+
+## How It Works
+
+When you run `ppg start`, the following happens:
+
+1. **Project Validation**: Verifies that you're in a valid PPG project directory
+2. **Qt Binding Check**: Ensures at least one Qt Python binding is installed
+3. **PYTHONPATH Configuration**: Adds `src/main/python` to the Python path
+4. **Application Launch**: Executes your main module
+
+## Environment Configuration
+
+PPG automatically configures the `PYTHONPATH` environment variable:
+
+```python
+# Added to PYTHONPATH
+src/main/python
+
+# Your existing PYTHONPATH is preserved
+# New path is prepended: src/main/python:$OLD_PYTHONPATH
+```
+
+This ensures your application can import modules using absolute imports:
+
+```python
+from components.MyComponent import MyComponent
+from views.MainView import MainView
+```
+
+## Example Usage
+
+### Basic Usage
+
+```bash
+$ cd my-ppg-project
+$ ppg start
+
+# Your application window opens
+```
+
+### With Hot Reloading
+
+PPG's hot reloading engine automatically detects changes to your Python files and reloads components without restarting the entire application.
+
+<Check>
+**Hot Reloading** is built into PPG! When you modify component files, changes are reflected immediately.
+</Check>
+
+## Requirements
+
+### Valid PPG Project
+
+The `start` command requires a properly initialized PPG project. It checks for:
+
+- `src/` directory
+- `src/build/settings/base.json` configuration file
+- `src/main/python/` directory
+
+If these are missing, you'll see an error:
+
+```bash
+$ ppg start
+Error: This command requires a PPG project. Did you run 'ppg init'?
+```
+
+### Qt Python Binding
+
+At least one of these Qt bindings must be installed:
+
+- **PySide6** (recommended)
+- PySide2
+- PyQt6
+- PyQt5
+
+```bash
+pip install PySide6
+```
+
+If no Qt binding is found:
+
+```bash
+$ ppg start
+Error: Couldn't find PyQt5, PyQt6, PySide2 or PySide6. Maybe you need to:
+    pip install PyQt5 or
+    pip install PyQt6 or
+    pip install PySide2 or
+    pip install PySide6
+```
+
+## Main Module Execution
+
+The command executes the main module specified in `src/build/settings/base.json`:
+
+```json
+{
+  "main_module": "src/main/python/main.py"
+}
+```
+
+### Default main.py Structure
+
+```python
+from ppg_runtime.application_context import ApplicationContext
+import sys
+
+class AppContext(ApplicationContext):
+    def run(self):
+        # Your application initialization
+        from views.MainWindow import MainWindow
+        
+        self.main_window = MainWindow()
+        self.main_window.show()
+        
+        return self.app.exec()
+
+if __name__ == '__main__':
+    appctxt = AppContext()
+    exit_code = appctxt.run()
+    sys.exit(exit_code)
+```
+
+## Development Workflow
+
+Typical development cycle:
+
+```bash
+# 1. Start your app
+ppg start
+
+# 2. Make changes to components/views
+# (Hot reloading automatically applies changes)
+
+# 3. Test new features
+
+# 4. Stop app (Ctrl+C)
+# 5. Run tests
+ppg test
+
+# 6. Restart
+ppg start
+```
+
+## Hot Reloading in Action
+
+<Steps>
+  <Step title="Start Application">
+    ```bash
+    ppg start
+    ```
+  </Step>
+  
+  <Step title="Modify a Component">
+    Edit `src/main/python/components/Button.py`:
+    ```python
+    def render_(self):
+        self.setText("Updated Button")  # Change text
+    ```
+  </Step>
+  
+  <Step title="See Changes Instantly">
+    The component automatically reloads - no restart needed!
+  </Step>
+</Steps>
+
+## Debugging Your Application
+
+### Print Debugging
+
+Standard output appears in the terminal:
+
+```python
+class MyComponent(QWidget):
+    def component_will_mount(self):
+        print("Component mounting...")  # Appears in terminal
+```
+
+### Python Debugger
+
+You can use `pdb` for interactive debugging:
+
+```python
+import pdb
+
+class MyComponent(QWidget):
+    def component_will_mount(self):
+        pdb.set_trace()  # Breakpoint
+```
+
+### IDE Debugging
+
+Run PPG through your IDE's debugger:
+
+```bash
+# Get the PPG executable path
+which ppg
+
+# In VS Code launch.json:
+{
+  "configurations": [
+    {
+      "name": "PPG Start",
+      "type": "python",
+      "request": "launch",
+      "module": "ppg",
+      "args": ["start"],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
+```
+
+## Error Messages
+
+### Missing Project
+
+```bash
+Error: This command requires a PPG project. Did you run 'ppg init'?
+```
+
+**Solution**: Run `ppg init` to create a new project.
+
+### No Qt Binding
+
+```bash
+Error: Couldn't find PyQt5, PyQt6, PySide2 or PySide6.
+```
+
+**Solution**: Install a Qt binding with pip:
+```bash
+pip install PySide6
+```
+
+### Module Import Error
+
+```bash
+ModuleNotFoundError: No module named 'components'
+```
+
+**Solution**: Ensure your project structure is correct and you're in the project root directory.
+
+## Implementation Details
+
+The `start` command (from `builtin_commands/__init__.py:203-223`):
+
+```python
+@command
+def start():
+    """
+    Run your app from source
+    """
+    require_existing_project()
+    if not _has_module('PyQt5') and not _has_module('PyQt6') \
+       and not _has_module('PySide2') and not _has_module('PySide6'):
+        raise FbsError(
+            "Couldn't find PyQt5, PyQt6, PySide2 or PySide6..."
+        )
+    env = dict(os.environ)
+    pythonpath = path('src/main/python')
+    old_pythonpath = env.get('PYTHONPATH', '')
+    if old_pythonpath:
+        pythonpath += os.pathsep + old_pythonpath
+    env['PYTHONPATH'] = pythonpath
+    subprocess.run([sys.executable, path(SETTINGS['main_module'])], env=env)
+```
+
+## Performance Tips
+
+<Tip>
+**Use Hot Reloading**: Keep your app running while developing. Hot reloading is much faster than restarting.
+</Tip>
+
+<Tip>
+**Virtual Environment**: Always use a virtual environment to avoid dependency conflicts.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Components" icon="code" href="/cli/create">
+    Generate new components and views
+  </Card>
+  <Card title="Build for Production" icon="cube" href="/cli/freeze">
+    Compile your app to an executable
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg create](/cli/create) - Generate components
+- [ppg test](/cli/test) - Run tests
+- [Hot Reloading](/guides/hot-reloading) - Learn about the reloading engine

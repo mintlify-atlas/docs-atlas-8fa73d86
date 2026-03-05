@@ -1,0 +1,378 @@
+---
+title: ppg create
+description: Generate components and views from templates
+---
+
+## Overview
+
+The `ppg create` command generates boilerplate code for new components or views from templates, maintaining PPG's architecture and best practices.
+
+```bash
+ppg create [type]
+```
+
+<Info>
+Generated components automatically include Pydux state management, PPG lifecycle methods, and are ready for hot reloading.
+</Info>
+
+## Component Types
+
+PPG supports two types of UI elements:
+
+### Component
+
+Reusable UI elements (buttons, input fields, custom widgets).
+
+```bash
+ppg create component
+```
+
+**Location**: `src/main/python/components/`
+
+### View
+
+Full-screen layouts or major UI sections (main window, settings dialog, dashboard).
+
+```bash
+ppg create view
+```
+
+**Location**: `src/main/python/views/`
+
+<Check>
+The command defaults to creating a component if no type is specified:
+```bash
+ppg create  # Creates a component
+```
+</Check>
+
+## Interactive Prompts
+
+When you run `ppg create`, you'll be asked for:
+
+### 1. Component Name
+
+The name is automatically converted to CamelCase:
+
+```bash
+? Component name: user profile card
+# Generated: UserProfileCard
+```
+
+### 2. Parent Widget
+
+The Qt widget class to inherit from. Defaults based on your Qt binding:
+
+- **PySide6/PySide2**: `QWidget` (default)
+- **PyQt6/PyQt5**: `QtWidget` (default)
+
+Common parent widgets:
+- `QWidget` - Generic container
+- `QMainWindow` - Main application window
+- `QDialog` - Dialog window
+- `QPushButton` - Button widget
+- `QLabel` - Text label
+- `QFrame` - Frame with border
+
+```bash
+? Inherit from: QWidget
+```
+
+## Generated Code Template
+
+Here's what gets generated:
+
+### PySide6 Component Example
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class UserProfileCard(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        pass
+```
+
+### PyQt6 Component Example
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PyQt6.QtWidgets import QtWidget
+
+@init_lifecycle
+class UserProfileCard(QtWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        pass
+```
+
+## Template Breakdown
+
+### Imports
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+```
+
+- **Pydux**: Global state management
+- **PPGLifeCycle**: Component lifecycle methods
+- **init_lifecycle**: Decorator that enables lifecycle hooks
+
+### Class Definition
+
+```python
+@init_lifecycle
+class UserProfileCard(QWidget, PPGLifeCycle, Pydux):
+```
+
+- **@init_lifecycle**: Required decorator
+- **QWidget**: Qt parent class
+- **PPGLifeCycle**: Adds lifecycle methods
+- **Pydux**: Adds state management
+
+### Lifecycle Methods
+
+```python
+def component_will_mount(self):
+    self.subscribe_to_store(self)
+```
+
+Automatically subscribes to Pydux store for state updates.
+
+```python
+def render_(self):
+    # Render the UI here
+    pass
+```
+
+Where you implement your UI logic.
+
+## Example Usage
+
+### Creating a Button Component
+
+```bash
+$ ppg create component
+? Component name: custom button
+? Inherit from: QPushButton
+
+Component CustomButton created in: /path/to/project/src/main/python/components ✅
+```
+
+**Generated File**: `src/main/python/components/CustomButton.py`
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QPushButton
+
+@init_lifecycle
+class CustomButton(QPushButton, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        self.setText("Click Me")
+        self.setMinimumWidth(120)
+```
+
+### Creating a Main Window View
+
+```bash
+$ ppg create view
+? Component name: main window
+? Inherit from: QMainWindow
+
+View MainWindow created in: /path/to/project/src/main/python/views ✅
+```
+
+**Generated File**: `src/main/python/views/MainWindow.py`
+
+## Overwrite Protection
+
+If a file with the same name exists, you'll be prompted:
+
+```bash
+$ ppg create component
+? Component name: CustomButton
+? Inherit from: QPushButton
+? The file CustomButton.py already exists. Overwrite? (y/N)
+```
+
+- **Yes**: Overwrites the existing file
+- **No**: Aborts the creation
+
+```bash
+Creation aborted by user.
+```
+
+## File Organization
+
+PPG automatically creates directories if they don't exist:
+
+```
+src/main/python/
+├── components/           # Created by ppg create component
+│   ├── CustomButton.py
+│   ├── UserCard.py
+│   └── Navbar.py
+└── views/                # Created by ppg create view
+    ├── MainWindow.py
+    ├── SettingsDialog.py
+    └── Dashboard.py
+```
+
+## Naming Conventions
+
+### Automatic CamelCase Conversion
+
+All naming formats are converted to CamelCase:
+
+| Input              | Output          |
+|--------------------|----------------|
+| `user_profile`     | `UserProfile`  |
+| `user-profile`     | `UserProfile`  |
+| `user profile`     | `UserProfile`  |
+| `UserProfile`      | `UserProfile`  |
+
+### File Names Match Class Names
+
+```python
+# File: CustomButton.py
+class CustomButton(QPushButton, PPGLifeCycle, Pydux):
+    ...
+```
+
+## Implementing Your Component
+
+After generation, implement your UI in the `render_()` method:
+
+```python
+@init_lifecycle
+class TaskCard(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.initUI()
+
+    def initUI(self):
+        """Set up the UI structure"""
+        self.layout = QVBoxLayout(self)
+        self.title_label = QLabel(self)
+        self.description_label = QLabel(self)
+        self.layout.addWidget(self.title_label)
+        self.layout.addWidget(self.description_label)
+
+    def render_(self):
+        """Update UI with current state"""
+        task = self.store.get_nested("current_task")
+        if task:
+            self.title_label.setText(task.get("title", ""))
+            self.description_label.setText(task.get("description", ""))
+```
+
+## Error Handling
+
+### Invalid Component Type
+
+```bash
+$ ppg create widget
+[Error]: The selected component type is invalid
+```
+
+**Valid types**: `component`, `view`
+
+### Missing base.json
+
+```bash
+Error: Could not read src/build/settings/base.json
+```
+
+**Solution**: Ensure you're in a valid PPG project directory.
+
+## Implementation Details
+
+The `create` command (from `builtin_commands/__init__.py:170-201`):
+
+1. **Validates** component type (component or view)
+2. **Prompts** for component name and parent widget
+3. **Reads** Qt binding from `base.json`
+4. **Generates** code from template with substitutions:
+   - `$Binding` → Qt binding (PySide6, PyQt6, etc.)
+   - `$Name` → Component name in CamelCase
+   - `$Widget` → Parent widget class
+5. **Creates** directory if needed
+6. **Checks** for existing file
+7. **Writes** generated code
+
+## Template Source
+
+The template is defined in `builtin_commands/components.py`:
+
+```python
+component_template = f"""
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from $Binding.QtWidgets import $Widget
+
+@init_lifecycle
+class $Name($Widget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        pass
+
+"""
+```
+
+## Best Practices
+
+<Tip>
+**Start Small**: Create specific components rather than monolithic views. This improves reusability and hot reloading efficiency.
+</Tip>
+
+<Tip>
+**Use Descriptive Names**: Name components based on their purpose, not their appearance.
+```bash
+# Good
+ppg create component  # LoginForm, UserProfile
+
+# Avoid
+ppg create component  # BlueBox, Container1
+```
+</Tip>
+
+<Warning>
+**Don't Modify Template Variables**: The template uses `$Binding`, `$Name`, and `$Widget` as placeholders. Don't use these variable names in your code.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Component Lifecycle" icon="rotate" href="/api/ppg-lifecycle">
+    Learn about lifecycle methods
+  </Card>
+  <Card title="Pydux State Management" icon="database" href="/api/pydux/overview">
+    Master global state management
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg start](/cli/start) - Run your app with new components
+- [Component Lifecycle](/api/ppg-lifecycle) - Understand the component lifecycle
+- [Pydux](/api/pydux/overview) - State management guide

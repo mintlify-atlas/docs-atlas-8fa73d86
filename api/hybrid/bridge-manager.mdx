@@ -1,0 +1,479 @@
+---
+title: BridgeManager
+description: High-level manager for WebEngineBridge with QWebChannel integration and multi-instance support
+---
+
+## Overview
+
+`BridgeManager` is a high-level wrapper around `WebEngineBridge` that simplifies the setup and management of Python-JavaScript communication in Qt WebEngine applications. It handles QWebChannel configuration, provides convenient methods for event registration, and supports broadcasting to multiple instances.
+
+## Class Definition
+
+```python
+from ppg_runtime.application_context import BridgeManager
+
+bridge_manager = BridgeManager(webview, channel_name="bridge")
+```
+
+## Class Variables
+
+### _instances
+
+```python
+_instances = []
+```
+
+Class-level list that tracks all active `BridgeManager` instances. Used for broadcasting events to all bridges via `emit_all()`.
+
+**Type:** `list[BridgeManager]`
+
+## Constructor
+
+### \_\_init\_\_()
+
+Creates a new bridge manager, sets up QWebChannel, and registers it with the webview.
+
+```python
+bridge_manager = BridgeManager(webview, channel_name="bridge")
+```
+
+<ParamField path="webview" type="QWebEngineView" required>
+  The Qt WebEngineView widget to attach the bridge to
+</ParamField>
+
+<ParamField path="channel_name" type="str" default="bridge">
+  Name used to register the bridge object in QWebChannel. This name is used in JavaScript to access the bridge
+</ParamField>
+
+**What it does:**
+1. Creates a new `WebEngineBridge` instance
+2. Creates and configures a `QWebChannel`
+3. Registers the bridge with the specified channel name
+4. Sets the web channel on the webview's page
+5. Adds itself to the `_instances` list
+
+**Example:**
+
+```python
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from ppg_runtime.application_context import BridgeManager
+
+webview = QWebEngineView()
+bridge_manager = BridgeManager(webview, "myBridge")
+
+# In JavaScript, access via:
+# channel.objects.myBridge
+```
+
+## Methods
+
+### register()
+
+Registers a Python function to handle events from JavaScript.
+
+```python
+bridge_manager.register(event, func)
+```
+
+<ParamField path="event" type="str" required>
+  The name of the event to handle
+</ParamField>
+
+<ParamField path="func" type="callable" required>
+  Function to call when the event is received. Should accept one parameter (payload) and optionally return a value
+</ParamField>
+
+**Example:**
+
+```python
+def handle_save(payload):
+    filename = payload.get('filename')
+    content = payload.get('content')
+    with open(filename, 'w') as f:
+        f.write(content)
+    return {"success": True, "message": "File saved"}
+
+bridge_manager.register("save_file", handle_save)
+```
+
+### unregister()
+
+Unregisters an event handler.
+
+```python
+bridge_manager.unregister(event)
+```
+
+<ParamField path="event" type="str" required>
+  The name of the event handler to remove
+</ParamField>
+
+**Example:**
+
+```python
+# Register
+bridge_manager.register("temp_event", temp_handler)
+
+# Later, remove it
+bridge_manager.unregister("temp_event")
+```
+
+### emit()
+
+Sends an event to the JavaScript frontend of this specific bridge instance.
+
+```python
+bridge_manager.emit(event, payload)
+```
+
+<ParamField path="event" type="str" required>
+  Event name to emit
+</ParamField>
+
+<ParamField path="payload" type="Any" required>
+  Event payload (will be JSON serialized)
+</ParamField>
+
+**Example:**
+
+```python
+# Send notification to this instance's UI
+bridge_manager.emit("notification", {
+    "type": "info",
+    "message": "Operation completed"
+})
+```
+
+### emit_all()
+
+Class method that broadcasts an event to all active bridge instances.
+
+```python
+BridgeManager.emit_all(event, payload)
+```
+
+<ParamField path="event" type="str" required>
+  Event name to emit to all instances
+</ParamField>
+
+<ParamField path="payload" type="Any" required>
+  Event payload (will be JSON serialized)
+</ParamField>
+
+**Example:**
+
+```python
+# Send message to all open windows
+BridgeManager.emit_all("global_update", {
+    "version": "2.0.0",
+    "message": "New version available"
+})
+```
+
+**Use Case:** Multiple windows or webviews that all need to receive the same event:
+
+```python
+# Create multiple windows
+window1 = QWebEngineView()
+bridge1 = BridgeManager(window1)
+
+window2 = QWebEngineView()
+bridge2 = BridgeManager(window2)
+
+# Broadcast to both
+BridgeManager.emit_all("theme_changed", {"theme": "dark"})
+```
+
+### close()
+
+Closes the bridge, removes it from the instances list, and cleans up the web channel.
+
+```python
+bridge_manager.close()
+```
+
+**What it does:**
+1. Sets the webview's web channel to `None`
+2. Removes this instance from `_instances` list
+
+**Example:**
+
+```python
+def closeEvent(self, event):
+    self.bridge_manager.close()
+    event.accept()
+```
+
+## QWebChannel Integration
+
+BridgeManager automatically handles QWebChannel setup:
+
+1. **Channel Creation:** Creates a `QWebChannel` instance
+2. **Object Registration:** Registers the bridge with the specified name
+3. **Page Integration:** Sets the channel on the webview's page
+
+### Accessing in JavaScript
+
+```javascript
+new QWebChannel(qt.webChannelTransport, function(channel) {
+    // Access bridge by the channel_name used in Python
+    window.bridge = channel.objects.bridge; // if channel_name="bridge"
+    
+    // Now you can use the bridge
+    bridge.send(JSON.stringify({event: "test", payload: {}}));
+});
+```
+
+### Multiple Bridges
+
+You can create multiple bridges with different names:
+
+```python
+# Python
+auth_bridge = BridgeManager(webview, "auth")
+data_bridge = BridgeManager(webview, "data")
+
+auth_bridge.register("login", handle_login)
+data_bridge.register("fetch", handle_fetch)
+```
+
+```javascript
+// JavaScript
+new QWebChannel(qt.webChannelTransport, function(channel) {
+    window.authBridge = channel.objects.auth;
+    window.dataBridge = channel.objects.data;
+    
+    authBridge.send(JSON.stringify({event: "login", payload: {...}}));
+    dataBridge.send(JSON.stringify({event: "fetch", payload: {...}}));
+});
+```
+
+## Complete Hybrid App Example
+
+### Python Application (main.py)
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle, BridgeManager
+from PySide6.QtWidgets import QMainWindow
+from PySide6.QtCore import QUrl
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+@init_lifecycle
+class HybridApp(QMainWindow, PPGLifeCycle):
+    def render_(self):
+        # Create web engine view
+        self.engine = QWebEngineView(self)
+        self.engine.load(QUrl.fromLocalFile(self.get_resource("index.html")))
+        
+        # Create bridge manager
+        self.bridge = BridgeManager(self.engine, "bridge")
+        
+        # Register event handlers
+        self.bridge.register("login", self.handle_login)
+        self.bridge.register("get_user_data", self.handle_get_user_data)
+        self.bridge.register("logout", self.handle_logout)
+        
+        self.setCentralWidget(self.engine)
+    
+    def handle_login(self, payload):
+        """Handle login request from JavaScript."""
+        username = payload.get('username')
+        password = payload.get('password')
+        
+        # Validate credentials
+        if username == "admin" and password == "password":
+            # Emit success event to UI
+            self.bridge.emit("login_success", {
+                "user": username,
+                "token": "abc123"
+            })
+            return {"success": True, "message": f"Welcome, {username}!"}
+        else:
+            return {"success": False, "message": "Invalid credentials"}
+    
+    def handle_get_user_data(self, payload):
+        """Fetch user data."""
+        return {
+            "name": "John Doe",
+            "email": "john@example.com",
+            "role": "admin"
+        }
+    
+    def handle_logout(self, payload):
+        """Handle logout."""
+        self.bridge.emit("logout_success", {"message": "Logged out"})
+        return {"success": True}
+    
+    def responsive_UI(self):
+        self.setMinimumSize(800, 600)
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = HybridApp()
+    window.show()
+    sys.exit(appctxt.app.exec())
+```
+
+### HTML Frontend (index.html)
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid App</title>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .hidden { display: none; }
+        .form-group { margin-bottom: 15px; }
+        input { padding: 8px; margin-top: 5px; width: 200px; }
+        button { padding: 10px 20px; cursor: pointer; }
+        #user-info { margin-top: 20px; padding: 15px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <div id="login-form">
+        <h1>Login</h1>
+        <div class="form-group">
+            <label for="username">Username:</label><br>
+            <input type="text" id="username" value="admin">
+        </div>
+        <div class="form-group">
+            <label for="password">Password:</label><br>
+            <input type="password" id="password" value="password">
+        </div>
+        <button id="loginBtn">Login</button>
+        <p id="login-message"></p>
+    </div>
+
+    <div id="user-panel" class="hidden">
+        <h1>Welcome!</h1>
+        <button id="getUserDataBtn">Load User Data</button>
+        <button id="logoutBtn">Logout</button>
+        <div id="user-info"></div>
+    </div>
+
+    <script>
+        // Initialize QWebChannel connection
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+            window.bridge = channel.objects.bridge;
+
+            // Listen for events from Python
+            bridge.bridge.connect(function(message) {
+                const data = JSON.parse(message);
+                console.log("Event from Python:", data.event, data.payload);
+
+                if (data.event === "login_success") {
+                    showUserPanel();
+                } else if (data.event === "logout_success") {
+                    showLoginForm();
+                }
+            });
+
+            // Login button handler
+            document.getElementById("loginBtn").onclick = function() {
+                const username = document.getElementById("username").value;
+                const password = document.getElementById("password").value;
+
+                bridge.send(JSON.stringify({
+                    event: "login",
+                    payload: { username, password }
+                })).then(responseJSON => {
+                    const response = JSON.parse(responseJSON);
+                    if (response.success) {
+                        document.getElementById("login-message").innerText = response.data.message;
+                        document.getElementById("login-message").style.color = "green";
+                    } else {
+                        document.getElementById("login-message").innerText = response.data.message;
+                        document.getElementById("login-message").style.color = "red";
+                    }
+                });
+            };
+
+            // Get user data button handler
+            document.getElementById("getUserDataBtn").onclick = function() {
+                bridge.send(JSON.stringify({
+                    event: "get_user_data",
+                    payload: {}
+                })).then(responseJSON => {
+                    const response = JSON.parse(responseJSON);
+                    if (response.success) {
+                        const userData = response.data;
+                        document.getElementById("user-info").innerHTML = `
+                            <h3>User Information</h3>
+                            <p><strong>Name:</strong> ${userData.name}</p>
+                            <p><strong>Email:</strong> ${userData.email}</p>
+                            <p><strong>Role:</strong> ${userData.role}</p>
+                        `;
+                    }
+                });
+            };
+
+            // Logout button handler
+            document.getElementById("logoutBtn").onclick = function() {
+                bridge.send(JSON.stringify({
+                    event: "logout",
+                    payload: {}
+                }));
+            };
+
+            function showUserPanel() {
+                document.getElementById("login-form").classList.add("hidden");
+                document.getElementById("user-panel").classList.remove("hidden");
+            }
+
+            function showLoginForm() {
+                document.getElementById("login-form").classList.remove("hidden");
+                document.getElementById("user-panel").classList.add("hidden");
+                document.getElementById("username").value = "";
+                document.getElementById("password").value = "";
+                document.getElementById("login-message").innerText = "";
+            }
+        });
+    </script>
+</body>
+</html>
+```
+
+## Multi-Instance Broadcasting
+
+Example of broadcasting to multiple windows:
+
+```python
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.bridge = BridgeManager(self.webview)
+        
+    def notify_all_windows(self):
+        """Send notification to all open windows."""
+        BridgeManager.emit_all("global_notification", {
+            "title": "System Update",
+            "message": "A new version is available"
+        })
+
+# Create multiple windows
+window1 = MainWindow()
+window2 = MainWindow()
+
+# Broadcast will reach both
+window1.notify_all_windows()
+```
+
+## Best Practices
+
+1. **Clean up:** Always call `close()` when closing windows
+2. **Error handling:** Wrap handlers in try-except blocks for better error messages
+3. **Unique names:** Use descriptive channel names when creating multiple bridges
+4. **Async operations:** For long-running operations, use Qt threads to avoid blocking
+5. **Type safety:** Validate payload structure in handlers
+
+## See Also
+
+- [WebEngineBridge](/api/hybrid/web-engine-bridge) - Lower-level bridge class
+- [QWebChannel Documentation](https://doc.qt.io/qt-6/qwebchannel.html) - Qt's web channel system
+- [QWebEngineView Documentation](https://doc.qt.io/qt-6/qwebengineview.html) - Qt's web engine view

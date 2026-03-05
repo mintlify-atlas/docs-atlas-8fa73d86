@@ -1,0 +1,428 @@
+---
+title: Creating Components
+description: Build reusable UI components with PPG's component system
+---
+
+PPG provides a powerful component system based on Qt widgets with React-like lifecycle hooks. Components are the building blocks of your application, encapsulating UI and behavior into reusable pieces.
+
+## Quick Start with ppg create
+
+The fastest way to create a new component is using the `ppg create` command:
+
+```bash
+ppg create
+```
+
+This interactive command will:
+1. Ask for your component name (e.g., `Navbar`)
+2. Ask for the Qt binding you're using (PySide6, PyQt5, etc.)
+3. Ask for the base widget type (QWidget, QPushButton, QLabel, etc.)
+4. Generate a component file with the proper structure
+
+## Component Template Structure
+
+When you create a component, PPG generates this template:
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class Navbar(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        pass
+```
+
+<Note>
+  The `@init_lifecycle` decorator automatically calls the component lifecycle methods in the correct order when your component is instantiated.
+</Note>
+
+## Component Lifecycle Hooks
+
+PPG components follow a predictable lifecycle. Understanding these hooks helps you build robust, maintainable components.
+
+<Steps>
+  <Step title="component_will_mount()">
+    Called before the component is rendered. This is where you:
+    - Subscribe to the Pydux store
+    - Initialize component state
+    - Set up event listeners
+    - Load initial data
+
+    ```python
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.user_data = None
+        self.loading = False
+    ```
+  </Step>
+
+  <Step title="render_()">
+    Called to build the UI. Create and configure your widgets here:
+
+    ```python
+    def render_(self):
+        # Create widgets
+        self.title = QLabel('Dashboard', self)
+        self.subtitle = QLabel('Welcome back!', self)
+        self.button = QPushButton('Refresh', self)
+        
+        # Connect signals
+        self.button.clicked.connect(self.on_refresh)
+        
+        # Set properties
+        self.title.setStyleSheet('font-size: 24px; font-weight: bold;')
+    ```
+  </Step>
+
+  <Step title="component_did_mount()">
+    Called after the component is fully rendered and mounted. Use this for:
+    - API calls
+    - Starting timers
+    - Focus management
+    - Analytics tracking
+
+    ```python
+    def component_did_mount(self):
+        # Component is now visible
+        self.load_user_data()
+        self.title.setFocus()
+    ```
+  </Step>
+
+  <Step title="set_CSS()">
+    Apply stylesheets to your component:
+
+    ```python
+    def set_CSS(self, path=None):
+        if path:
+            with open(path, 'r') as f:
+                self.setStyleSheet(f.read())
+        else:
+            self.setStyleSheet("""
+                QLabel#title {
+                    font-size: 24px;
+                    color: #333;
+                }
+                QPushButton {
+                    background: #007bff;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 4px;
+                }
+            """)
+    ```
+  </Step>
+
+  <Step title="responsive_UI()">
+    Handle responsive layout and window resizing:
+
+    ```python
+    def responsive_UI(self):
+        width = self.width()
+        height = self.height()
+        
+        # Position elements responsively
+        self.title.setGeometry(20, 20, width - 40, 40)
+        self.subtitle.setGeometry(20, 70, width - 40, 30)
+        self.button.setGeometry(20, 120, 150, 40)
+    ```
+
+    This method is automatically called on window resize events.
+  </Step>
+</Steps>
+
+## Props and Initialization
+
+Pass data to components through the constructor:
+
+```python
+@init_lifecycle
+class UserCard(QWidget, PPGLifeCycle, Pydux):
+    def __init__(self, user_id, show_avatar=True, parent=None):
+        # Store props before calling super()
+        self.user_id = user_id
+        self.show_avatar = show_avatar
+        super().__init__(parent)
+        # component_will_mount(), render_(), etc. are called automatically
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.user = None
+
+    def render_(self):
+        self.name_label = QLabel(self)
+        self.email_label = QLabel(self)
+        
+        if self.show_avatar:
+            self.avatar = QLabel(self)
+            self.avatar.setPixmap(QPixmap('default-avatar.png'))
+        
+        self.load_user_data()
+
+    def load_user_data(self):
+        # Use self.user_id to fetch data
+        user = fetch_user(self.user_id)
+        self.name_label.setText(user['name'])
+        self.email_label.setText(user['email'])
+```
+
+Using the component:
+
+```python
+class Dashboard(QMainWindow, PPGLifeCycle):
+    def render_(self):
+        # Pass props to child component
+        self.user_card = UserCard(
+            user_id=123,
+            show_avatar=True,
+            parent=self
+        )
+```
+
+## Component Composition
+
+Build complex UIs by composing smaller components:
+
+```python
+# components/sidebar.py
+@init_lifecycle
+class Sidebar(QWidget, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.layout = QVBoxLayout(self)
+        
+        self.logo = QLabel('MyApp', self)
+        self.nav_home = QPushButton('Home', self)
+        self.nav_settings = QPushButton('Settings', self)
+        
+        self.layout.addWidget(self.logo)
+        self.layout.addWidget(self.nav_home)
+        self.layout.addWidget(self.nav_settings)
+
+# components/header.py
+@init_lifecycle
+class Header(QWidget, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.layout = QHBoxLayout(self)
+        self.title = QLabel('Dashboard', self)
+        self.user_menu = QPushButton('Account', self)
+        
+        self.layout.addWidget(self.title)
+        self.layout.addStretch()
+        self.layout.addWidget(self.user_menu)
+
+# main.py
+from components.sidebar import Sidebar
+from components.header import Header
+
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def render_(self):
+        # Create container
+        container = QWidget(self)
+        layout = QVBoxLayout(container)
+        
+        # Compose components
+        self.header = Header(container)
+        self.content = QWidget(container)
+        
+        layout.addWidget(self.header)
+        layout.addWidget(self.content)
+        
+        # Add sidebar
+        main_layout = QHBoxLayout()
+        self.sidebar = Sidebar(self)
+        main_layout.addWidget(self.sidebar)
+        main_layout.addWidget(container)
+        
+        central = QWidget(self)
+        central.setLayout(main_layout)
+        self.setCentralWidget(central)
+```
+
+## State Management in Components
+
+Components can maintain local state and subscribe to the global Pydux store:
+
+```python
+@init_lifecycle
+class Counter(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Local state
+        self.count = 0
+        
+        # Subscribe to global store
+        self.subscribe_to_store(self)
+        
+        # Define store schema
+        self.set_schema({
+            "global_count": int
+        })
+
+    def render_(self):
+        self.label = QLabel(f'Count: {self.count}', self)
+        self.increment_btn = QPushButton('Increment Local', self)
+        self.global_btn = QPushButton('Increment Global', self)
+        
+        self.increment_btn.clicked.connect(self.increment_local)
+        self.global_btn.clicked.connect(self.increment_global)
+
+    def increment_local(self):
+        # Update local state
+        self.count += 1
+        self.label.setText(f'Count: {self.count}')
+
+    def increment_global(self):
+        # Update global store
+        current = self.store.get('global_count', 0)
+        self.update_store({'global_count': current + 1})
+
+    def on_store_change(self, store):
+        # React to global store changes
+        print(f"Global count is now: {store.global_count}")
+```
+
+## Component Communication
+
+<Accordion title="Using Qt Signals">
+  ```python
+  from PySide6.QtCore import Signal
+
+  @init_lifecycle
+  class SearchBox(QWidget, PPGLifeCycle, Pydux):
+      # Define custom signal
+      search_triggered = Signal(str)
+
+      def render_(self):
+          self.input = QLineEdit(self)
+          self.button = QPushButton('Search', self)
+          self.button.clicked.connect(self.on_search)
+
+      def on_search(self):
+          query = self.input.text()
+          # Emit signal to parent
+          self.search_triggered.emit(query)
+
+  # Parent component
+  class MainWindow(QMainWindow, PPGLifeCycle):
+      def render_(self):
+          self.search = SearchBox(self)
+          # Connect to child's signal
+          self.search.search_triggered.connect(self.handle_search)
+
+      def handle_search(self, query):
+          print(f"Searching for: {query}")
+  ```
+</Accordion>
+
+<Accordion title="Using Pydux Store">
+  ```python
+  # Any component can update the store
+  self.update_store({'current_page': 'settings'})
+
+  # Any subscribed component will receive updates
+  def on_store_change(self, store):
+      if store.current_page == 'settings':
+          self.show_settings_view()
+  ```
+</Accordion>
+
+## Real-World Example: Todo Item Component
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget, QLabel, QCheckBox, QPushButton, QHBoxLayout
+from PySide6.QtCore import Signal
+
+@init_lifecycle
+class TodoItem(QWidget, PPGLifeCycle, Pydux):
+    # Signals for parent communication
+    toggled = Signal(int, bool)  # (todo_id, completed)
+    deleted = Signal(int)        # (todo_id)
+
+    def __init__(self, todo_id, text, completed=False, parent=None):
+        self.todo_id = todo_id
+        self.todo_text = text
+        self.is_completed = completed
+        super().__init__(parent)
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        layout = QHBoxLayout(self)
+        
+        # Checkbox
+        self.checkbox = QCheckBox(self)
+        self.checkbox.setChecked(self.is_completed)
+        self.checkbox.toggled.connect(self.on_toggle)
+        
+        # Text label
+        self.label = QLabel(self.todo_text, self)
+        
+        # Delete button
+        self.delete_btn = QPushButton('Delete', self)
+        self.delete_btn.clicked.connect(self.on_delete)
+        
+        layout.addWidget(self.checkbox)
+        layout.addWidget(self.label)
+        layout.addStretch()
+        layout.addWidget(self.delete_btn)
+        
+        self.update_style()
+
+    def set_CSS(self):
+        self.setStyleSheet("""
+            TodoItem {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            TodoItem:hover {
+                background: #f5f5f5;
+            }
+        """)
+
+    def on_toggle(self, checked):
+        self.is_completed = checked
+        self.update_style()
+        self.toggled.emit(self.todo_id, checked)
+
+    def on_delete(self):
+        self.deleted.emit(self.todo_id)
+
+    def update_style(self):
+        if self.is_completed:
+            self.label.setStyleSheet('text-decoration: line-through; color: #999;')
+        else:
+            self.label.setStyleSheet('color: #333;')
+
+    def responsive_UI(self):
+        self.setMinimumHeight(50)
+```
+
+## Best Practices
+
+1. **Single Responsibility**: Each component should do one thing well
+2. **Reusability**: Design components to be reusable across your app
+3. **Props Over State**: Prefer passing data as props when possible
+4. **Clear Naming**: Use descriptive names that indicate what the component does
+5. **Lifecycle Awareness**: Use the appropriate lifecycle hook for each task
+
+<Note>
+  Components automatically clean up when destroyed. However, if you create timers, external connections, or resources, clean them up in a custom cleanup method or `closeEvent()`.
+</Note>
+
+## Next Steps
+
+- [Working with Pydux](/guides/working-with-pydux) - Manage application state
+- [Hot Reloading](/guides/hot-reloading) - See changes instantly during development
+- [Building Hybrid Apps](/guides/building-hybrid-apps) - Combine Qt with web technologies

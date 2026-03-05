@@ -1,80 +1,396 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Create and run your first PPG application in minutes
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will walk you through creating your first PPG application from scratch. You'll learn the essential workflow: initializing a project, understanding the structure, running the app, and making your first changes with hot reloading.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  **Prerequisites**: Make sure you have [installed PPG](/installation) before proceeding.
 </Note>
+
+## Create Your First Project
+
+Let's build a simple "Hello World" application using PPG's interactive project generator.
+
+<Steps>
+  <Step title="Initialize the Project">
+    Navigate to an empty directory and run:
+    
+    ```bash
+    ppg init
+    ```
+    
+    PPG will greet you with an interactive setup wizard:
+    
+    ```
+    ✨ Welcome to PPG v1.2.0 ✨
+    
+    Let's create a new project! This will create a src/ directory with the necessary files and folders.
+    ```
+  </Step>
+  
+  <Step title="Configure Your Project">
+    Answer the prompts to configure your project:
+    
+    ```bash
+    App name: MyApp
+    Version: 1.0.0
+    Author: John Doe
+    Select your Qt binding [PyQt5/PyQt6/PySide2/PySide6]: PySide6
+    Mac bundle identifier: com.johndoe.myapp
+    ```
+    
+    <Info>
+      PPG automatically installs your chosen Qt binding if it's not already present.
+    </Info>
+  </Step>
+  
+  <Step title="Confirm Settings">
+    Review your configuration and confirm:
+    
+    ```
+    ┌─────────────────────────────────────┐
+    │  Please confirm your settings       │
+    ├─────────────────────────────────────┤
+    │ App name:              MyApp        │
+    │ Version:               1.0.0        │
+    │ Author:                John Doe     │
+    │ Qt binding:            PySide6      │
+    │ Mac bundle identifier: com.johndoe… │
+    └─────────────────────────────────────┘
+    
+    Continue? [y/n]: y
+    ```
+  </Step>
+  
+  <Step title="Project Created">
+    PPG creates your project structure:
+    
+    ```
+    🔎 Checking if PySide6 is installed...
+    ✅ PySide6 is installed!
+    
+    🎉 Created the src/ directory 🎉. If you have PySide6 installed, you can now do:
+    
+        ppg start
+    ```
+  </Step>
+</Steps>
+
+## Project Structure
+
+PPG generates a complete project structure for you:
+
+```
+my-app/
+├── src/
+│   ├── build/
+│   │   └── settings/
+│   │       ├── base.json       # App configuration
+│   │       ├── mac.json         # macOS-specific settings
+│   │       ├── linux.json       # Linux-specific settings
+│   │       └── windows.json     # Windows-specific settings
+│   └── main/
+│       ├── python/
+│       │   └── main.py          # Your application entry point
+│       ├── resources/
+│       │   └── base/            # Static resources (images, etc.)
+│       └── icons/
+│           ├── Icon.ico         # Windows icon
+│           ├── base/            # Cross-platform icons
+│           ├── linux/           # Linux icons
+│           └── mac/             # macOS icons
+```
+
+### Key Files
+
+<CardGroup cols={2}>
+  <Card title="main.py" icon="code">
+    Your application's entry point containing the main window class and startup logic.
+  </Card>
+  
+  <Card title="base.json" icon="gear">
+    Configuration file with app name, version, Qt binding, and build settings.
+  </Card>
+  
+  <Card title="resources/" icon="folder">
+    Directory for static assets like images, fonts, and data files.
+  </Card>
+  
+  <Card title="icons/" icon="image">
+    Platform-specific application icons in various sizes.
+  </Card>
+</CardGroup>
+
+## Understanding the Generated Code
+
+Let's examine the generated `main.py` file:
+
+```python main.py
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.utils import app_is_frozen
+from PySide6.QtWidgets import QMainWindow, QLabel
+
+@init_lifecycle
+@hot_reloading
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Called before rendering - set up state and subscriptions
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Build your UI here
+        QLabel('Hello World!', parent=self)
+
+    def responsive_UI(self):
+        # Handle responsive layout and sizing
+        self.setMinimumSize(640, 480)
+
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = MyApp()
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+### Code Breakdown
+
+<Accordion title="Decorators">
+  ```python
+  @init_lifecycle
+  @hot_reloading
+  class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+  ```
+  
+  - `@init_lifecycle`: Automatically invokes lifecycle methods in the correct order
+  - `@hot_reloading`: Enables hot reloading for instant UI updates during development
+</Accordion>
+
+<Accordion title="Multiple Inheritance">
+  ```python
+  class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+  ```
+  
+  - `QMainWindow`: Base Qt window class
+  - `PPGLifeCycle`: Provides React-style lifecycle hooks
+  - `Pydux`: Enables global state management
+</Accordion>
+
+<Accordion title="Lifecycle Methods">
+  ```python
+  def component_will_mount(self):
+      self.subscribe_to_store(self)
+  
+  def render_(self):
+      QLabel('Hello World!', parent=self)
+  
+  def responsive_UI(self):
+      self.setMinimumSize(640, 480)
+  ```
+  
+  - `component_will_mount()`: Setup before rendering (state, subscriptions)
+  - `render_()`: Build the UI components
+  - `responsive_UI()`: Handle window sizing and responsive layouts
+</Accordion>
+
+<Accordion title="Application Startup">
+  ```python
+  if __name__ == '__main__':
+      appctxt = ApplicationContext()
+      window = MyApp()
+      if not app_is_frozen():
+          window._init_hot_reload_system(__file__)
+      window.show()
+      exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+      sys.exit(exec_func())
+  ```
+  
+  - Creates the application context
+  - Instantiates the main window
+  - Enables hot reloading in development mode
+  - Shows the window and starts the event loop
+</Accordion>
+
+## Run Your Application
+
+Start your application in development mode:
+
+```bash
+ppg start
+```
+
+You should see:
+
+```
+🔥 Hot Reload: Listening for changes in main.py
+```
+
+And a window displaying "Hello World!" will appear.
+
+<Info>
+  **Development Mode**: `ppg start` runs your app from source with hot reloading enabled. Changes to your code will be reflected instantly without restarting.
+</Info>
+
+## Experience Hot Reloading
+
+Let's make a live change to see hot reloading in action:
+
+<Steps>
+  <Step title="Keep the App Running">
+    Leave your application window open.
+  </Step>
+  
+  <Step title="Edit main.py">
+    Open `src/main/python/main.py` and modify the `render_()` method:
+    
+    ```python
+    def render_(self):
+        label = QLabel('Hello from PPG! 🚀', parent=self)
+        label.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #2fe784;
+            padding: 20px;
+        """)
+    ```
+  </Step>
+  
+  <Step title="Save the File">
+    Save `main.py`. You'll see console output:
+    
+    ```
+    🔄 Hot Reload: Detected change in 'main.py'
+    ⚡️ Hot Reload: Processing changes... (Reload #1)
+    ✨ Hot Reload: Done. UI will update shortly.
+    ```
+  </Step>
+  
+  <Step title="See Instant Updates">
+    Your application window automatically updates with the new styled label—no restart needed!
+  </Step>
+</Steps>
+
+<Warning>
+  **Hot Reloading in Production**: Remove the `@hot_reloading` decorator and `_init_hot_reload_system()` call before deploying to production. Hot reloading is a development-only feature.
+</Warning>
+
+## Build Configuration
+
+The `src/build/settings/base.json` file contains your app's configuration:
+
+```json base.json
+{
+    "app_name": "MyApp",
+    "version": "1.0.0",
+    "author": "John Doe",
+    "binding": "PySide6",
+    "main_module": "src/main/python/main.py",
+    "hidden_imports": [
+        "__future__"
+    ]
+}
+```
+
+- **app_name**: Your application's display name
+- **version**: Semantic version (major.minor.patch)
+- **binding**: Qt binding (PySide6, PyQt6, PySide2, or PyQt5)
+- **main_module**: Entry point for your application
+- **hidden_imports**: Modules to include when freezing your app
+
+## CLI Commands Reference
+
+PPG provides a complete set of CLI commands for your development workflow:
+
+| Command | Description |
+|---------|-------------|
+| `ppg init` | Initialize a new project with interactive setup |
+| `ppg start` | Run your app from source in development mode |
+| `ppg create` | Generate new components or views from templates |
+| `ppg freeze` | Compile your app into a standalone executable |
+| `ppg installer` | Create a platform-specific installer (.exe, .dmg, etc.) |
+| `ppg test` | Run your project's unit tests |
+| `ppg clean` | Remove build artifacts and temporary files |
+| `ppg version` | Display the current PPG version |
+
+## Add a New Component
+
+PPG can generate component scaffolding for you:
+
+```bash
+ppg create component
+```
+
+Follow the prompts:
+
+```
+Component name: UserProfile
+Inherit from: QWidget
+```
+
+PPG creates `src/main/python/components/UserProfile.py`:
+
+```python UserProfile.py
+from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class UserProfile(QWidget, PPGLifeCycle, Pydux):
+
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        # Render the UI here
+        pass
+```
+
+You can now import and use this component in your application.
+
+## Testing Your Terminal Output
+
+When you run `ppg start`, you should see output similar to:
+
+```bash
+$ ppg start
+🔥 Hot Reload: Listening for changes in main.py
+```
+
+When you save changes:
+
+```bash
+🔄 Hot Reload: Detected change in 'main.py'
+⚡️ Hot Reload: Processing changes... (Reload #1)
+✨ Hot Reload: Done. UI will update shortly.
+```
+
+## Next Steps
+
+Congratulations! You've created your first PPG application. Now you're ready to dive deeper:
+
+<CardGroup cols={2}>
+  <Card title="Your First App Tutorial" icon="graduation-cap" href="/your-first-app">
+    Build a complete application with state management and reactive components
+  </Card>
+  
+  <Card title="Component Lifecycle" icon="rotate" href="/core-concepts/component-lifecycle">
+    Master PPG's React-inspired lifecycle hooks
+  </Card>
+  
+  <Card title="State Management" icon="database" href="/core-concepts/state-management">
+    Learn Pydux for type-safe global state
+  </Card>
+  
+  <Card title="Deployment" icon="rocket" href="/deployment/freezing">
+    Package your app for distribution
+  </Card>
+</CardGroup>

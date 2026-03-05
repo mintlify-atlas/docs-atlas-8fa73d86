@@ -1,0 +1,417 @@
+---
+title: Hot Reloading
+description: Speed up development with instant UI updates when you save your code
+---
+
+Hot reloading is PPG's development superpower. It watches your Python files and automatically reloads your UI when you save changes - no need to restart your application. This dramatically speeds up the development and design process.
+
+## What is Hot Reloading?
+
+Hot reloading detects changes to your source files and updates the running application in real-time. When you save a file:
+
+1. The file watcher detects the change
+2. The module is reloaded using AST (Abstract Syntax Tree) analysis
+3. Your component's `render_()` method is called again
+4. The UI updates instantly - state is preserved
+
+<Note>
+  Hot reloading is for development only. Always disable it in production builds by checking `app_is_frozen()` before initializing the hot reload system.
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Import hot reloading">
+    ```python
+    from ppg_runtime.application_context.devtools.reloader import hot_reloading
+    from ppg_runtime.application_context.utils import app_is_frozen
+    ```
+  </Step>
+
+  <Step title="Add the @hot_reloading decorator">
+    ```python
+    @init_lifecycle
+    @hot_reloading
+    class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+        pass
+    ```
+  </Step>
+
+  <Step title="Initialize the hot reload system">
+    ```python
+    if __name__ == '__main__':
+        appctxt = ApplicationContext()
+        window = MyApp()
+        
+        # Only enable in development
+        if not app_is_frozen():
+            window._init_hot_reload_system(__file__)
+        
+        window.show()
+        exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+        sys.exit(exec_func())
+    ```
+  </Step>
+</Steps>
+
+## Complete Example
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.utils import app_is_frozen
+from PySide6.QtWidgets import QMainWindow, QLabel, QPushButton
+
+@init_lifecycle
+@hot_reloading
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"count": int})
+        self.update_store({"count": 0})
+
+    def render_(self):
+        self.label = QLabel('Click the button!', self)
+        self.button = QPushButton('Increment', self)
+        self.button.clicked.connect(self.on_click)
+
+    def on_click(self):
+        current = self.store.get('count', 0)
+        self.update_store({"count": current + 1})
+
+    def on_store_change(self, store):
+        self.label.setText(f'Count: {store.count}')
+        self.label.adjustSize()
+
+    def responsive_UI(self):
+        self.setMinimumSize(400, 300)
+        self.label.move(20, 20)
+        self.button.move(20, 60)
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = MyApp()
+    
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+Now when you save changes to this file, the UI will automatically update!
+
+## How It Works
+
+<Accordion title="File Watching">
+  When you call `_init_hot_reload_system()`, PPG sets up a file watcher using the `watchdog` library:
+
+  ```python
+  # Automatically detects the source file
+  def _init_hot_reload_system(self, source_file: str = None):
+      if source_file is None:
+          # Auto-detect from call stack
+          source_file = inspect.currentframe().f_back.f_code.co_filename
+      
+      # Watch the directory containing the source file
+      observer = Observer()
+      observer.schedule(event_handler, path=source_dir, recursive=True)
+      observer.start()
+  ```
+
+  The watcher monitors the source directory recursively, detecting changes to any `.py` file.
+</Accordion>
+
+<Accordion title="AST-Based Module Reloading">
+  When a file changes, PPG uses Python's AST (Abstract Syntax Tree) to reload methods:
+
+  ```python
+  # Parse the updated source file
+  tree = ast.parse(source_code)
+  
+  # Find the class definition
+  for node in tree.body:
+      if isinstance(node, ast.ClassDef) and node.name == class_name:
+          # Extract and recompile methods
+          for item in node.body:
+              if isinstance(item, ast.FunctionDef):
+                  method_code = astor.to_source(item)
+                  exec(method_code, local_ns, local_ns)
+                  
+                  # Bind new method to instance
+                  new_method = types.MethodType(local_ns[item.name], self)
+                  setattr(self, item.name, new_method)
+  ```
+
+  This approach preserves instance state while updating method implementations.
+</Accordion>
+
+<Accordion title="UI Re-rendering">
+  After methods are reloaded, PPG triggers a re-render:
+
+  ```python
+  def _perform_hot_reload(self):
+      # Clear existing widgets
+      self._clear_hot_reloaded_widgets()
+      
+      # Re-run lifecycle
+      QTimer.singleShot(0, self._process_post_render_updates)
+  
+  def _process_post_render_updates(self):
+      self._trigger_render()  # Calls render_(), responsive_UI(), etc.
+      self._ensure_children_visibility()
+      self.adjustSize()
+      self.update()
+      self.repaint()
+  ```
+</Accordion>
+
+## Configuration
+
+### Manual Source File Specification
+
+By default, hot reloading auto-detects the source file. You can specify it manually:
+
+```python
+# Explicit source file
+window._init_hot_reload_system("/path/to/my/app.py")
+
+# Or use __file__ (recommended)
+window._init_hot_reload_system(__file__)
+```
+
+### Watching Multiple Files
+
+The file watcher monitors the entire directory tree recursively. Changes to any imported module will trigger a reload:
+
+```
+src/main/python/
+├── main.py           # Watched
+├── components/
+│   ├── navbar.py     # Watched
+│   └── sidebar.py    # Watched
+└── utils/
+    └── helpers.py    # Watched
+```
+
+However, only methods in the decorated class are hot-reloaded. If you change an imported module, you may need to restart the application.
+
+### Debouncing
+
+Hot reloading includes built-in debouncing to prevent multiple reloads when you save rapidly:
+
+```python
+# Located in reloader.py
+def _handle_hot_reload_request(self):
+    self.__class__._hot_reload_count += 1
+    if self.__class__._hot_reload_timer:
+        # Debounce: wait 500ms before reloading
+        self.__class__._hot_reload_timer.start(500)
+```
+
+## Limitations
+
+<Note>
+  Hot reloading has some limitations due to how Python handles dynamic code execution:
+</Note>
+
+1. **Component Methods Only**: Only methods in the decorated class are reloaded
+2. **No Schema Changes**: Changing Pydux schema requires a restart
+3. **Import Changes**: Adding/removing imports may require a restart
+4. **Class Structure**: Changing base classes or decorators requires a restart
+5. **State Preservation**: Local instance variables may be lost on reload
+
+### What Can Be Hot Reloaded
+
+✅ **Works:**
+- `render_()` method changes
+- `responsive_UI()` adjustments
+- `set_CSS()` style updates
+- Event handler implementations
+- New methods added to the class
+- Logic changes in existing methods
+
+❌ **Requires Restart:**
+- `component_will_mount()` changes (already executed)
+- Pydux schema modifications
+- Import statements
+- Class inheritance changes
+- Decorator changes
+- Constructor changes
+
+## Error Handling
+
+If hot reloading fails (syntax error, runtime exception), an error message appears in the UI:
+
+```python
+def _show_hot_reload_error(self, message):
+    # Display error overlay
+    self._hot_reload_error_label = QLabel(self)
+    self._hot_reload_error_label.setText(f"❌ Hot Reload Error:\n{message}")
+    self._hot_reload_error_label.setStyleSheet("""
+        color: tomato; 
+        font-weight: bold; 
+        background-color: #fff; 
+        padding: 10px; 
+        border: 2px solid tomato;
+    """)
+    self._hot_reload_error_label.show()
+```
+
+The error is also printed to the console with a full traceback.
+
+## Console Output
+
+Hot reloading provides rich console feedback:
+
+```
+🔥 Hot Reload: Listening for changes in main.py
+
+🔄 Hot Reload: Detected change in 'main.py'
+⚡️ Hot Reload: Processing changes... (Reload #1)
+✨ Hot Reload: Done. UI will update shortly.
+
+🔄 Hot Reload: Detected change in 'main.py'
+⚡️ Hot Reload: Processing changes... (Reload #2)
+✨ Hot Reload: Done. UI will update shortly.
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always disable in production">
+    ```python
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    ```
+
+    Never ship hot reloading code to users. It impacts performance and exposes your source code.
+  </Step>
+
+  <Step title="Use with Pydux for state persistence">
+    Store important state in Pydux instead of instance variables:
+
+    ```python
+    # ❌ Lost on reload
+    def component_will_mount(self):
+        self.user_data = fetch_user()
+
+    # ✅ Preserved on reload
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({"user_data": dict})
+        self.update_store({"user_data": fetch_user()})
+    ```
+  </Step>
+
+  <Step title="Test without hot reloading">
+    Before building, test your app without hot reloading to catch any initialization issues:
+
+    ```python
+    # Comment out temporarily
+    # if not app_is_frozen():
+    #     window._init_hot_reload_system(__file__)
+    ```
+  </Step>
+
+  <Step title="Clean up resources">
+    Hot reloading automatically calls cleanup when the window closes:
+
+    ```python
+    def closeEvent(self, event):
+        self.cleanup_hot_reload_resources()
+        super().closeEvent(event)
+        event.accept()
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<Accordion title="Hot reload not triggering">
+  **Possible causes:**
+  - Wrong file being watched
+  - File saved in different directory
+  - Editor using atomic saves (creates temp file)
+
+  **Solution:**
+  ```python
+  # Explicitly specify the file
+  window._init_hot_reload_system(__file__)
+  
+  # Check console for messages
+  print(f"Watching: {window.__class__.hot_reload_source_file}")
+  ```
+</Accordion>
+
+<Accordion title="UI not updating">
+  **Possible causes:**
+  - Syntax error in new code
+  - Changes outside `render_()` method
+  - Exception during re-render
+
+  **Solution:**
+  Check console for error messages. Hot reload errors are displayed in both console and UI.
+</Accordion>
+
+<Accordion title="State being lost">
+  **Possible causes:**
+  - State stored in instance variables
+  - `component_will_mount()` reinitializing state
+
+  **Solution:**
+  Use Pydux store for state that should persist across reloads:
+  ```python
+  # Store state in Pydux
+  self.update_store({"form_data": form_values})
+  ```
+</Accordion>
+
+## Advanced: Hot Reloading with Multiple Components
+
+Each component can have its own hot reload system:
+
+```python
+# main.py
+@init_lifecycle
+@hot_reloading
+class MainWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def render_(self):
+        self.sidebar = Sidebar(self)
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = MainWindow()
+    if not app_is_frozen():
+        window._init_hot_reload_system(__file__)
+    window.show()
+    # ...
+
+# components/sidebar.py
+@init_lifecycle
+@hot_reloading
+class Sidebar(QWidget, PPGLifeCycle, Pydux):
+    def render_(self):
+        # Sidebar UI
+        pass
+
+# To enable hot reloading for Sidebar:
+# (from parent component)
+if not app_is_frozen():
+    self.sidebar._init_hot_reload_system(
+        "/path/to/components/sidebar.py"
+    )
+```
+
+<Note>
+  Hot reloading works best when your application is well-modularized with clear component boundaries. Complex state dependencies may require a full restart to reload properly.
+</Note>
+
+## Next Steps
+
+- [Creating Components](/guides/creating-components) - Build components that work well with hot reloading
+- [Working with Pydux](/guides/working-with-pydux) - Preserve state across reloads
+- [Packaging & Distribution](/guides/packaging-distribution) - Remember to disable hot reloading for production

@@ -1,0 +1,578 @@
+---
+title: Building Hybrid Apps
+description: Combine Python/Qt backend with HTML/CSS/JavaScript frontend using WebEngineBridge
+---
+
+PPG's hybrid app architecture lets you build desktop applications with a Python backend and a modern web frontend. Use HTML, CSS, and JavaScript for your UI while leveraging Python for business logic, system access, and native features.
+
+## Why Hybrid Apps?
+
+- **Modern UI**: Use web technologies (React, Vue, vanilla JS) for rich interfaces
+- **Best of Both Worlds**: Python for backend logic, JavaScript for interactive UI
+- **Rapid Development**: Leverage existing web skills and libraries
+- **Native Integration**: Access file system, system APIs, and hardware through Python
+- **Hot Reloading**: Instant updates for both Python and web code
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────┐
+│  Python/Qt Backend                  │
+│  ├─ Application Logic               │
+│  ├─ Database Access                 │
+│  ├─ System APIs                     │
+│  └─ BridgeManager                   │
+│      ↕ QWebChannel                  │
+│  ┌─────────────────────────────┐   │
+│  │ QWebEngineView              │   │
+│  │  └─ HTML/CSS/JavaScript     │   │
+│  │     ├─ UI Components        │   │
+│  │     ├─ User Interactions    │   │
+│  │     └─ Bridge Client        │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+## Quick Start Tutorial
+
+<Steps>
+  <Step title="Set up the Python backend">
+    Create a Qt application with QWebEngineView:
+
+    ```python
+    import sys
+    from ppg_runtime.application_context.PySide6 import ApplicationContext
+    from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle, BridgeManager
+    from PySide6.QtWidgets import QMainWindow
+    from PySide6.QtCore import QUrl
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+
+    @init_lifecycle
+    class HybridApp(QMainWindow, PPGLifeCycle, Pydux):
+        def component_will_mount(self):
+            self.subscribe_to_store(self)
+
+        def render_(self):
+            # Create web engine view
+            self.engine = QWebEngineView(self)
+            
+            # Load your HTML file
+            html_path = self.get_resource("index.html")
+            self.engine.load(QUrl.fromLocalFile(html_path))
+            
+            # Set as central widget
+            self.setCentralWidget(self.engine)
+            
+            # Create bridge for Python ↔ JavaScript communication
+            self.bridge = BridgeManager(self.engine, "bridge")
+            
+            # Register event handlers
+            self.bridge.register("login", self.handle_login)
+            self.bridge.register("get_files", self.handle_get_files)
+
+        def handle_login(self, payload):
+            username = payload.get('username')
+            password = payload.get('password')
+            
+            # Your authentication logic here
+            if authenticate(username, password):
+                return {"success": True, "user_id": 123}
+            else:
+                return {"success": False, "error": "Invalid credentials"}
+
+        def handle_get_files(self, payload):
+            import os
+            directory = payload.get('directory', '.')
+            files = os.listdir(directory)
+            return {"files": files}
+
+        def responsive_UI(self):
+            self.setMinimumSize(800, 600)
+
+    if __name__ == '__main__':
+        appctxt = ApplicationContext()
+        window = HybridApp()
+        window.show()
+        exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+        sys.exit(exec_func())
+    ```
+  </Step>
+
+  <Step title="Create the HTML frontend">
+    Create `src/main/resources/base/index.html`:
+
+    ```html
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Hybrid App</title>
+        <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                max-width: 400px;
+                margin: 50px auto;
+                padding: 30px;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            input {
+                width: 100%;
+                padding: 10px;
+                margin: 10px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+            button {
+                width: 100%;
+                padding: 12px;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+            button:hover {
+                background: #0056b3;
+            }
+            #output {
+                margin-top: 20px;
+                padding: 10px;
+                background: #f8f9fa;
+                border-radius: 4px;
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Login</h1>
+            <input type="text" id="username" placeholder="Username">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn">Login</button>
+            <div id="output"></div>
+        </div>
+
+        <script src="app.js"></script>
+    </body>
+    </html>
+    ```
+  </Step>
+
+  <Step title="Set up the Bridge">
+    Create `src/main/resources/base/app.js`:
+
+    ```javascript
+    // Initialize bridge when page loads
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+        // Get bridge object registered in Python
+        window.bridge = channel.objects.bridge;
+
+        // Listen for events from Python → JavaScript
+        bridge.bridge.connect(function (message) {
+            const data = JSON.parse(message);
+            console.log('Event from Python:', data.event, data.payload);
+            handlePythonEvent(data.event, data.payload);
+        });
+
+        // Set up UI event handlers
+        setupUIHandlers();
+    });
+
+    function setupUIHandlers() {
+        // Login button
+        document.getElementById('login-btn').onclick = async function() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Send event to Python
+            const response = await sendToPython('login', {
+                username: username,
+                password: password
+            });
+
+            // Display response
+            const output = document.getElementById('output');
+            output.style.display = 'block';
+            
+            if (response.success) {
+                output.innerHTML = `<strong>Success!</strong> Logged in as ${username}`;
+                output.style.color = 'green';
+            } else {
+                output.innerHTML = `<strong>Error:</strong> ${response.error}`;
+                output.style.color = 'red';
+            }
+        };
+    }
+
+    // Helper function to send events to Python
+    async function sendToPython(event, payload) {
+        try {
+            const message = JSON.stringify({ event, payload });
+            const responseJSON = await bridge.send(message);
+            const response = JSON.parse(responseJSON);
+            
+            if (response.success) {
+                return response.data;
+            } else {
+                throw new Error(response.error);
+            }
+        } catch (error) {
+            console.error('Bridge error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Handle events from Python
+    function handlePythonEvent(event, payload) {
+        switch (event) {
+            case 'user_updated':
+                updateUserDisplay(payload);
+                break;
+            case 'notification':
+                showNotification(payload.message);
+                break;
+            default:
+                console.log('Unknown event:', event, payload);
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Run and test">
+    ```bash
+    # Run your application
+    python src/main/python/main.py
+    ```
+
+    The login form should appear, and when you click Login, the JavaScript sends data to Python, which processes it and returns a response.
+  </Step>
+</Steps>
+
+## BridgeManager API
+
+### Python Side
+
+<CodeGroup>
+```python Registering Event Handlers
+# Register a handler for an event from JavaScript
+self.bridge.register("event_name", self.handler_function)
+
+def handler_function(self, payload):
+    # payload is the data sent from JavaScript
+    print("Received:", payload)
+    
+    # Return data to JavaScript
+    return {"status": "success", "data": [1, 2, 3]}
+```
+
+```python Emitting Events to JavaScript
+# Send event to JavaScript
+self.bridge.emit("notification", {
+    "message": "File saved successfully!",
+    "type": "success"
+})
+
+# Emit to all instances (if multiple windows)
+BridgeManager.emit_all("global_update", {
+    "version": "2.0.0"
+})
+```
+
+```python Unregistering Handlers
+# Remove an event handler
+self.bridge.unregister("event_name")
+
+# Close the bridge
+self.bridge.close()
+```
+</CodeGroup>
+
+### JavaScript Side
+
+<CodeGroup>
+```javascript Sending Events to Python
+// Send event and await response
+async function callPython() {
+    const response = await bridge.send(JSON.stringify({
+        event: "save_file",
+        payload: {
+            filename: "document.txt",
+            content: "Hello, World!"
+        }
+    }));
+    
+    const data = JSON.parse(response);
+    if (data.success) {
+        console.log("File saved:", data.data);
+    } else {
+        console.error("Error:", data.error);
+    }
+}
+```
+
+```javascript Receiving Events from Python
+// Listen for events from Python
+bridge.bridge.connect(function(message) {
+    const { event, payload } = JSON.parse(message);
+    
+    if (event === "data_updated") {
+        updateUI(payload);
+    }
+});
+```
+</CodeGroup>
+
+## Integrating with Web Frameworks
+
+<Accordion title="React Integration">
+  ```javascript
+  // src/main/resources/base/app.jsx
+  import React, { useState, useEffect } from 'react';
+  import ReactDOM from 'react-dom';
+
+  function App() {
+      const [user, setUser] = useState(null);
+      const [bridge, setBridge] = useState(null);
+
+      useEffect(() => {
+          // Initialize bridge
+          new QWebChannel(qt.webChannelTransport, function(channel) {
+              const bridgeObj = channel.objects.bridge;
+              setBridge(bridgeObj);
+
+              // Listen for Python events
+              bridgeObj.bridge.connect(function(message) {
+                  const { event, payload } = JSON.parse(message);
+                  if (event === 'user_updated') {
+                      setUser(payload);
+                  }
+              });
+          });
+      }, []);
+
+      const login = async (username, password) => {
+          const response = await sendToPython(bridge, 'login', { username, password });
+          if (response.success) {
+              setUser(response.user);
+          }
+      };
+
+      return (
+          <div>
+              {user ? (
+                  <h1>Welcome, {user.name}!</h1>
+              ) : (
+                  <LoginForm onLogin={login} />
+              )}
+          </div>
+      );
+  }
+
+  ReactDOM.render(<App />, document.getElementById('root'));
+  ```
+</Accordion>
+
+<Accordion title="Vue Integration">
+  ```javascript
+  // src/main/resources/base/app.js
+  const { createApp } = Vue;
+
+  createApp({
+      data() {
+          return {
+              user: null,
+              bridge: null
+          }
+      },
+      mounted() {
+          new QWebChannel(qt.webChannelTransport, (channel) => {
+              this.bridge = channel.objects.bridge;
+              
+              this.bridge.bridge.connect((message) => {
+                  const { event, payload } = JSON.parse(message);
+                  this.handleEvent(event, payload);
+              });
+          });
+      },
+      methods: {
+          async login(username, password) {
+              const msg = JSON.stringify({
+                  event: 'login',
+                  payload: { username, password }
+              });
+              const response = await this.bridge.send(msg);
+              const data = JSON.parse(response);
+              if (data.success) {
+                  this.user = data.data.user;
+              }
+          },
+          handleEvent(event, payload) {
+              if (event === 'logout') {
+                  this.user = null;
+              }
+          }
+      }
+  }).mount('#app');
+  ```
+</Accordion>
+
+## Complete Working Example
+
+Here's a full file browser hybrid app:
+
+```python
+# src/main/python/main.py
+import sys
+import os
+from pathlib import Path
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle, BridgeManager
+from PySide6.QtWidgets import QMainWindow
+from PySide6.QtCore import QUrl
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+@init_lifecycle
+class FileBrowser(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.current_path = str(Path.home())
+
+    def render_(self):
+        # Create web view
+        self.engine = QWebEngineView(self)
+        self.engine.load(QUrl.fromLocalFile(self.get_resource("index.html")))
+        self.setCentralWidget(self.engine)
+        
+        # Set up bridge
+        self.bridge = BridgeManager(self.engine, "bridge")
+        self.bridge.register("list_directory", self.list_directory)
+        self.bridge.register("read_file", self.read_file)
+        self.bridge.register("create_folder", self.create_folder)
+
+    def list_directory(self, payload):
+        path = payload.get('path', self.current_path)
+        try:
+            entries = []
+            for item in os.listdir(path):
+                full_path = os.path.join(path, item)
+                entries.append({
+                    'name': item,
+                    'is_dir': os.path.isdir(full_path),
+                    'size': os.path.getsize(full_path) if os.path.isfile(full_path) else 0
+                })
+            self.current_path = path
+            return {'entries': entries, 'path': path}
+        except Exception as e:
+            return {'error': str(e)}
+
+    def read_file(self, payload):
+        path = payload.get('path')
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+            return {'content': content}
+        except Exception as e:
+            return {'error': str(e)}
+
+    def create_folder(self, payload):
+        path = payload.get('path')
+        try:
+            os.makedirs(path, exist_ok=True)
+            # Notify JavaScript that folder was created
+            self.bridge.emit('folder_created', {'path': path})
+            return {'success': True}
+        except Exception as e:
+            return {'error': str(e)}
+
+    def responsive_UI(self):
+        self.setMinimumSize(1000, 700)
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = FileBrowser()
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+## Debugging Hybrid Apps
+
+<Steps>
+  <Step title="Enable DevTools">
+    Add a button to open Chrome DevTools:
+
+    ```python
+    from PySide6.QtWebEngineCore import QWebEnginePage
+
+    def open_dev_tools(self):
+        self.dev_tools = QWebEngineView()
+        if not self.engine.page().devToolsPage():
+            self.engine.page().setDevToolsPage(
+                QWebEnginePage(self.engine.page().profile(), self.dev_tools)
+            )
+        self.dev_tools.setPage(self.engine.page().devToolsPage())
+        self.dev_tools.setWindowTitle("DevTools")
+        self.dev_tools.show()
+        self.dev_tools.resize(800, 600)
+    ```
+  </Step>
+
+  <Step title="Add console logging">
+    ```javascript
+    // Log all bridge communication
+    async function sendToPython(event, payload) {
+        console.log('→ Python:', event, payload);
+        const response = await bridge.send(JSON.stringify({ event, payload }));
+        const data = JSON.parse(response);
+        console.log('← Python:', data);
+        return data;
+    }
+    ```
+  </Step>
+
+  <Step title="Handle errors gracefully">
+    ```python
+    def handle_request(self, payload):
+        try:
+            # Your logic here
+            return {"success": True, "data": result}
+        except Exception as e:
+            import traceback
+            return {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+1. **Error Handling**: Always return `{"success": bool}` from Python handlers
+2. **Type Safety**: Validate payload data in Python handlers
+3. **Security**: Sanitize file paths and user input
+4. **Performance**: Use async/await in JavaScript for all bridge calls
+5. **Separation**: Keep business logic in Python, UI logic in JavaScript
+6. **Testing**: Test Python handlers independently from the UI
+
+<Note>
+  The QWebChannel bridge is asynchronous. All JavaScript calls to Python return Promises, so use `async/await` or `.then()` to handle responses.
+</Note>
+
+## Next Steps
+
+- [Working with Pydux](/guides/working-with-pydux) - Share state between Python and JavaScript
+- [Hot Reloading](/guides/hot-reloading) - Develop hybrid apps faster
+- [Packaging & Distribution](/guides/packaging-distribution) - Deploy your hybrid app

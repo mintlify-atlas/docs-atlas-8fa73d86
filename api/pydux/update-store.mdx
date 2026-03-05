@@ -1,0 +1,186 @@
+---
+title: "update_store"
+description: "Update values in the Pydux store and trigger reactive updates"
+---
+
+## Method Signature
+
+```python
+def update_store(self, obj: Dict[str, Any]) -> None
+```
+
+## Description
+
+Updates one or more values in the Pydux store. When a schema is defined, validates the updates against the schema. Automatically triggers `on_store_change()` callbacks for all subscribed observers and notifies reactive widgets about the changes.
+
+## Parameters
+
+<ParamField path="obj" type="Dict[str, Any]" required>
+  Dictionary containing the keys and values to update in the store. Only specified keys are updated; other keys remain unchanged.
+</ParamField>
+
+## Behavior
+
+### With Schema
+
+When a schema is set via `set_schema()`:
+
+1. Merges the update with current store state
+2. Validates combined state against Pydantic model
+3. Updates the ReactiveStoreDict
+4. Calls `notify_key()` for each updated key
+5. Triggers `on_store_change()` for all observers
+
+### Without Schema
+
+If no schema is defined, behaves like a simple dictionary update with observer notifications.
+
+## Validation
+
+Updates are validated against the schema. If validation fails, a `TypeError` is raised with the validation error details:
+
+```python
+try:
+    self.update_store({"age": "not a number"})
+except TypeError as e:
+    print(f"Validation error: {e}")
+```
+
+## Examples
+
+### Basic Update
+
+```python
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({
+            "greeting": str,
+            "count": int
+        })
+    
+    def on_button_click(self):
+        # Update single value
+        self.update_store({"count": 1})
+    
+    def on_store_change(self, state):
+        print(f"Count is now: {self.store.get('count')}")
+```
+
+### Multiple Updates
+
+```python
+# Update multiple values at once
+self.update_store({
+    "username": "Alice",
+    "email": "alice@example.com",
+    "age": 30
+})
+```
+
+### Incremental Updates
+
+```python
+def increment_counter(self):
+    current = self.store.get("count", 0)
+    self.update_store({"count": current + 1})
+
+def update_user_email(self, new_email):
+    # Only updates email, other user fields unchanged
+    self.update_store({"email": new_email})
+```
+
+### Event Handler Updates
+
+```python
+from PySide6.QtWidgets import QLineEdit, QPushButton
+
+def render_(self):
+    self.input = QLineEdit(self)
+    self.button = QPushButton("Save", self)
+    self.button.clicked.connect(self.on_save)
+
+def on_save(self):
+    text = self.input.text()
+    self.update_store({"greeting": text})
+```
+
+### Updating with BaseModel Instances
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    email: str
+
+self.set_schema({"user": User})
+
+# Update with a complete model instance
+new_user = User(name="Bob", email="bob@example.com")
+self.update_store({"user": new_user})
+```
+
+## Reactive Updates
+
+When `update_store()` is called:
+
+1. **Reactive Widgets**: Widgets that accessed the updated keys during rendering are automatically re-rendered
+2. **Observer Callbacks**: All subscribed observers have their `on_store_change()` method called
+3. **UI Reconciliation**: Components with `_reconcile_widgets_state()` are scheduled for update
+
+```python
+def on_store_change(self, state):
+    # Called automatically after update_store()
+    # state is the Pydantic model instance (when schema is set)
+    # or a dict (when no schema)
+    
+    greeting = self.store.get("greeting", "")
+    self.label.setText(greeting)
+```
+
+## Error Handling
+
+### Type Validation Errors
+
+```python
+self.set_schema({"age": int})
+
+try:
+    self.update_store({"age": "twenty"})
+except TypeError as e:
+    # Handle validation error
+    print(f"Invalid type: {e}")
+```
+
+### Missing Required Fields
+
+```python
+# When updating, you only need to provide changed fields
+# Missing fields retain their current values
+self.update_store({"count": 5})  # Other fields unchanged
+```
+
+## Store Property Setter
+
+You can also use the `store` property setter, which internally calls `update_store()`:
+
+```python
+# These are equivalent:
+self.update_store({"count": 10})
+self.store = {"count": 10}
+```
+
+## Performance Notes
+
+- Updates are efficient - only changed keys trigger notifications
+- Reactive widgets only re-render if they accessed the changed keys
+- Multiple updates in quick succession are handled gracefully
+- Use `QTimer.singleShot()` to batch multiple updates if needed
+
+## Related Methods
+
+- [set_schema](/api/pydux/set-schema) - Define store structure before updating
+- [update_nested_model](/api/pydux/nested-models) - Partial updates for nested models
+- [subscribe_to_store](/api/pydux/subscribe) - Receive update notifications
+- [remove_from_store](/api/pydux/overview) - Remove keys from store

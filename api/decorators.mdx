@@ -1,0 +1,395 @@
+---
+title: 'Decorators'
+description: 'Framework decorators for components and commands'
+icon: 'at'
+---
+
+## Overview
+
+PPG provides several decorators to enhance your components and extend the framework. These decorators add functionality like lifecycle management, hot reloading, and custom commands.
+
+## Component Decorators
+
+### @init_lifecycle
+
+Automatically initializes the PPG lifecycle methods in the correct order.
+
+```python
+from ppg_runtime.application_context import init_lifecycle
+
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    pass
+```
+
+#### What It Does
+
+The decorator wraps your class's `__init__` method to call lifecycle methods in this order:
+
+1. `component_will_mount()`
+2. `allow_bg()`
+3. `render_()`
+4. `component_did_mount()`
+5. `set_CSS()`
+6. `responsive_UI()`
+
+#### Implementation
+
+```python
+def init_lifecycle(cls):
+    def __init__(self, *args, **kwargs):
+        super(cls, self).__init__(*args, **kwargs)
+        self.component_will_mount()
+        self.allow_bg()
+        self.render_()
+        self.component_did_mount()
+        self.set_CSS()
+        self.responsive_UI()
+    
+    cls.__init__ = __init__
+    return cls
+```
+
+#### Usage Example
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
+
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        self.setWindowTitle("My App")
+        self.setGeometry(100, 100, 800, 600)
+    
+    def render_(self):
+        central = QWidget()
+        layout = QVBoxLayout()
+        
+        self.label = QLabel("Hello World")
+        layout.addWidget(self.label)
+        
+        central.setLayout(layout)
+        self.setCentralWidget(central)
+    
+    def set_CSS(self):
+        self.setStyleSheet("""
+            QWidget {
+                background-color: white;
+            }
+        """)
+```
+
+<Note>
+  You must inherit from both your Qt widget class and `PPGLifeCycle` for this decorator to work properly.
+</Note>
+
+### @hot_reloading
+
+Enables hot module reloading for development. Changes to your component code are automatically applied without restarting the application.
+
+```python
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+
+@hot_reloading
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle):
+    pass
+```
+
+#### What It Does
+
+1. Adds the `PPGHotReloadMixin` to your class
+2. Initializes hot reload infrastructure
+3. Watches for file changes using `watchdog`
+4. Automatically reloads and re-renders your component when code changes
+
+#### Implementation
+
+```python
+def hot_reloading(cls):
+    if PPGHotReloadMixin not in cls.__bases__:
+        cls.__bases__ = (PPGHotReloadMixin,) + cls.__bases__
+    
+    setattr(cls, '_hot_reload_signaler', None)
+    setattr(cls, '_hot_reload_observer', None)
+    setattr(cls, '_hot_reload_timer', None)
+    setattr(cls, '_hot_reload_count', 0)
+    setattr(cls, 'hot_reload_source_file', None)
+    
+    return cls
+```
+
+#### Usage Example
+
+```python
+import sys
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
+
+@hot_reloading
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        self.setWindowTitle("Hot Reload Example")
+        self.setGeometry(100, 100, 800, 600)
+        self._init_hot_reload_system()
+    
+    def render_(self):
+        central = QWidget()
+        layout = QVBoxLayout()
+        
+        # Try changing this text and saving the file!
+        self.label = QLabel("Hello World")
+        layout.addWidget(self.label)
+        
+        central.setLayout(layout)
+        self.setCentralWidget(central)
+
+class AppContext(ApplicationContext):
+    def run(self):
+        self.window = MainWindow()
+        self.window.show()
+        return self.app.exec()
+
+if __name__ == '__main__':
+    appctxt = AppContext()
+    exit_code = appctxt.run()
+    sys.exit(exit_code)
+```
+
+#### How It Works
+
+1. **File Watching**: Uses the `watchdog` library to monitor your source file for changes
+2. **AST Parsing**: When a change is detected, parses the file using Python's `ast` module
+3. **Method Replacement**: Replaces methods on your live instance using the new code
+4. **UI Re-render**: Calls `_trigger_render()` to rebuild the UI with the new code
+
+#### Features
+
+- **Live Updates**: Edit your `render_()`, `set_CSS()`, or event handlers and see changes instantly
+- **State Preservation**: Component state is preserved across reloads
+- **Error Display**: Shows errors in the UI if hot reload fails
+- **Console Feedback**: Provides rich console output for reload events
+
+#### Requirements
+
+Your component must:
+1. Have a `render_()` method
+2. Inherit from `PPGLifeCycle`
+3. Call `self._init_hot_reload_system()` in `component_will_mount()`
+
+<Warning>
+  Hot reloading is for development only. Remove the `@hot_reloading` decorator before freezing your application for production.
+</Warning>
+
+## Framework Decorators
+
+### @command
+
+Defines custom PPG CLI commands that can be invoked with `ppg <command_name>`.
+
+```python
+from ppg.cmdline import command
+
+@command
+def my_command():
+    """Description of my custom command"""
+    print("Running my command")
+```
+
+#### What It Does
+
+Registers a function as a PPG CLI command, making it available via `ppg <function_name>` on the command line.
+
+#### Implementation
+
+```python
+from ppg._state import COMMANDS
+
+def command(f):
+    """
+    Use this as a decorator to define custom ppg commands.
+    """
+    COMMANDS[f.__name__] = f
+    return f
+```
+
+#### Usage Example
+
+```python
+# In your project's build script or custom command file
+from ppg.cmdline import command
+from ppg import SETTINGS, path
+import os
+
+@command
+def clean():
+    """Clean build artifacts"""
+    target_dir = path('target')
+    if os.path.exists(target_dir):
+        import shutil
+        shutil.rmtree(target_dir)
+        print(f"Cleaned {target_dir}")
+
+@command
+def version():
+    """Print application version"""
+    print(f"Version: {SETTINGS['version']}")
+
+@command
+def deploy(environment='staging'):
+    """Deploy the application to specified environment"""
+    print(f"Deploying to {environment}...")
+    # Your deployment logic here
+```
+
+#### Command Line Usage
+
+```bash
+# Run your custom commands
+ppg clean
+ppg version
+ppg deploy production
+```
+
+#### Parameters
+
+Commands can accept parameters:
+
+```python
+@command
+def deploy(environment, version=None):
+    """Deploy to environment with optional version
+    
+    Args:
+        environment: Target environment (required)
+        version: Version to deploy (optional)
+    """
+    if version:
+        print(f"Deploying version {version} to {environment}")
+    else:
+        print(f"Deploying latest to {environment}")
+```
+
+```bash
+ppg deploy staging
+ppg deploy production --version 1.2.3
+```
+
+<Note>
+  The command name is automatically derived from the function name. Use underscores in function names (they'll be preserved in the CLI).
+</Note>
+
+## Utility Decorators
+
+### @cached_property
+
+Creates a cached property that computes its value once and caches it.
+
+```python
+from ppg_runtime.application_context import cached_property
+
+class MyComponent:
+    @cached_property
+    def expensive_resource(self):
+        # This is only computed once
+        return load_large_dataset()
+```
+
+#### What It Does
+
+Converts a method into a property that caches its return value after the first call.
+
+#### Implementation
+
+```python
+from functools import lru_cache
+
+def cached_property(getter):
+    """
+    A cached Python @property. Use it to instantiate components
+    that comprise your application.
+    """
+    return property(lru_cache()(getter))
+```
+
+#### Usage Example
+
+```python
+from ppg_runtime.application_context import cached_property, PPGLifeCycle
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+
+class AppContext(ApplicationContext):
+    @cached_property
+    def database(self):
+        """Database connection - created once and reused"""
+        print("Initializing database connection...")
+        return DatabaseConnection(self.build_settings['db_url'])
+    
+    @cached_property
+    def main_window(self):
+        """Main window - created once"""
+        return MainWindow(self)
+    
+    def run(self):
+        # First access - creates the window
+        self.main_window.show()
+        
+        # Subsequent accesses return the same instance
+        self.main_window.setWindowTitle("Updated Title")
+        
+        return self.app.exec()
+```
+
+#### Use Cases
+
+1. **Lazy Initialization**: Create expensive resources only when needed
+2. **Singleton Pattern**: Ensure only one instance of a component exists
+3. **Resource Management**: Cache file paths, database connections, etc.
+
+```python
+class AppContext(ApplicationContext):
+    @cached_property
+    def config(self):
+        """Load configuration once"""
+        return json.load(open(self.get_resource('config.json')))
+    
+    @cached_property
+    def theme(self):
+        """Load theme based on config"""
+        theme_name = self.config['theme']
+        return Theme.load(theme_name)
+```
+
+## Decorator Stacking
+
+Decorators can be combined. Order matters:
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from PySide6.QtWidgets import QMainWindow
+
+# Correct order: hot_reloading first, then init_lifecycle
+@hot_reloading
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        self._init_hot_reload_system()  # Required for hot reloading
+    
+    def render_(self):
+        pass
+```
+
+<Warning>
+  Always place `@hot_reloading` before `@init_lifecycle` when using both decorators together.
+</Warning>
+
+## See Also
+
+- [PPGLifeCycle](/api/ppg-lifecycle) - Lifecycle methods reference
+- [ApplicationContext](/api/application-context) - Application context reference
+- [Custom Commands](https://build-system.fman.io/manual/#custom-commands) - Creating custom CLI commands

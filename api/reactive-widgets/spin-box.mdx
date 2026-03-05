@@ -1,0 +1,456 @@
+---
+title: ReactiveSpinBox
+description: Numeric input widget with increment/decrement buttons and bidirectional Pydux store synchronization
+---
+
+## Overview
+
+`ReactiveSpinBox` is a reactive wrapper around Qt's `QSpinBox` that provides two-way data binding with your Pydux store. It allows users to enter or adjust integer values using keyboard input or increment/decrement buttons.
+
+**Source:** `ppg_runtime/ReactiveWidgets/spin_box.py:16`
+
+## Inheritance
+
+```python
+ReactiveSpinBox(QSpinBox)
+```
+
+Inherits all methods and properties from Qt's `QSpinBox`.
+
+## Constructor
+
+```python
+ReactiveSpinBox(
+    parent,
+    key: str,
+    onChange = None,
+    minimum: int = 0,
+    maximum: int = 100,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()`, `update_store()`, and `get_nested()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind to. Supports nested keys using dot notation (e.g., `"settings.count"`).
+  
+  The value should be an integer in the store.
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[int], None]" default="None">
+  Optional callback function called when the value changes.
+  
+  Receives the new integer value.
+</ParamField>
+
+<ParamField path="minimum" type="int" default="0">
+  Minimum allowed value.
+</ParamField>
+
+<ParamField path="maximum" type="int" default="100">
+  Maximum allowed value.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QSpinBox` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that synchronizes the spinbox value with the store. Called automatically when store changes.
+
+**Behavior:**
+- Retrieves integer value from store using `parent.get_nested(key)`
+- Defaults to `minimum` if key not found
+- Converts value to integer
+- Updates spinbox only if value differs
+- Uses `_updating_from_store` flag to prevent circular updates
+- Supports nested keys
+
+**Source:** `ppg_runtime/ReactiveWidgets/spin_box.py:67`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/spin_box.py:83`
+
+### _on_value_changed(value)
+
+```python
+def _on_value_changed(self, value: int)
+```
+
+Internal callback connected to Qt's `valueChanged` signal. Updates the store when user changes the value.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+<ParamField path="value" type="int">
+  The new spinbox value.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/spin_box.py:50`
+
+## Usage Examples
+
+### Basic SpinBox
+
+Simple integer input:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveSpinBox
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"count": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSpinBox(
+            self,
+            key="count",
+            minimum=0,
+            maximum=100
+        ).setGeometry(20, 20, 100, 30)
+```
+
+### With Label
+
+Show current value:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveSpinBox, ReactiveLabel
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"quantity": int})
+        self.update_store({"quantity": 1})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Label
+        ReactiveLabel(self, text="Quantity:").setGeometry(20, 20, 80, 30)
+        
+        # SpinBox
+        ReactiveSpinBox(
+            self,
+            key="quantity",
+            minimum=1,
+            maximum=99
+        ).setGeometry(110, 20, 100, 30)
+        
+        # Total display
+        ReactiveLabel(
+            self,
+            text="Total: {quantity} items"
+        ).setGeometry(220, 20, 150, 30)
+```
+
+### With Change Callback
+
+Calculate total price:
+
+```python
+def on_quantity_change(qty):
+    price_per_item = 9.99
+    total = qty * price_per_item
+    print(f"Quantity: {qty}, Total: ${total:.2f}")
+    self.update_store({"total": total})
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "quantity": int,
+            "total": float,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSpinBox(
+            self,
+            key="quantity",
+            minimum=1,
+            maximum=100,
+            onChange=on_quantity_change
+        ).setGeometry(20, 20, 100, 30)
+        
+        ReactiveLabel(
+            self,
+            text="Total: ${total:.2f}"
+        ).setGeometry(130, 20, 150, 30)
+```
+
+### Nested State
+
+Access nested configuration:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "settings": {
+                "width": int,
+                "height": int,
+                "margin": int,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSpinBox(self, key="settings.width", minimum=100, maximum=1920).setGeometry(20, 20, 100, 30)
+        ReactiveSpinBox(self, key="settings.height", minimum=100, maximum=1080).setGeometry(20, 60, 100, 30)
+        ReactiveSpinBox(self, key="settings.margin", minimum=0, maximum=100).setGeometry(20, 100, 100, 30)
+```
+
+### Custom Range and Step
+
+Negative values and custom increment:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"temperature": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        spinbox = ReactiveSpinBox(
+            self,
+            key="temperature",
+            minimum=-50,
+            maximum=50
+        )
+        spinbox.setGeometry(20, 20, 100, 30)
+        spinbox.setSingleStep(5)  # Increment by 5
+        spinbox.setSuffix(" °C")  # Add unit suffix
+```
+
+### With Prefix and Suffix
+
+Add units or currency:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "price": int,
+            "distance": int,
+            "weight": int,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Price in dollars
+        price_spin = ReactiveSpinBox(self, key="price", minimum=0, maximum=9999)
+        price_spin.setGeometry(20, 20, 120, 30)
+        price_spin.setPrefix("$")
+        
+        # Distance in kilometers
+        dist_spin = ReactiveSpinBox(self, key="distance", minimum=0, maximum=1000)
+        dist_spin.setGeometry(20, 60, 120, 30)
+        dist_spin.setSuffix(" km")
+        
+        # Weight in grams
+        weight_spin = ReactiveSpinBox(self, key="weight", minimum=0, maximum=5000)
+        weight_spin.setGeometry(20, 100, 120, 30)
+        weight_spin.setSuffix(" g")
+```
+
+### Form with Multiple SpinBoxes
+
+Product order form:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "order": {
+                "shirts": int,
+                "pants": int,
+                "shoes": int,
+            },
+            "totalItems": int,
+        })
+        self.subscribe_to_store(self)
+    
+    def calculate_total(self, value):
+        total = (
+            self.store.get("order", {}).get("shirts", 0) +
+            self.store.get("order", {}).get("pants", 0) +
+            self.store.get("order", {}).get("shoes", 0)
+        )
+        self.update_store({"totalItems": total})
+    
+    def render_(self):
+        y = 20
+        items = [("shirts", "Shirts"), ("pants", "Pants"), ("shoes", "Shoes")]
+        
+        for key, label in items:
+            ReactiveLabel(self, text=label).setGeometry(20, y, 100, 30)
+            ReactiveSpinBox(
+                self,
+                key=f"order.{key}",
+                minimum=0,
+                maximum=10,
+                onChange=self.calculate_total
+            ).setGeometry(130, y, 80, 30)
+            y += 40
+        
+        # Total
+        ReactiveLabel(
+            self,
+            text="Total Items: {totalItems}"
+        ).setGeometry(20, y, 200, 30)
+```
+
+### Read-only Display
+
+Disable user input:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"score": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        spinbox = ReactiveSpinBox(
+            self,
+            key="score",
+            minimum=0,
+            maximum=9999
+        )
+        spinbox.setGeometry(20, 20, 100, 30)
+        spinbox.setReadOnly(True)  # Display only
+        spinbox.setButtonSymbols(QSpinBox.NoButtons)  # Hide arrows
+```
+
+### Special Values Text
+
+Custom display for specific values:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"timeout": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        spinbox = ReactiveSpinBox(
+            self,
+            key="timeout",
+            minimum=0,
+            maximum=300
+        )
+        spinbox.setGeometry(20, 20, 150, 30)
+        spinbox.setSpecialValueText("No timeout")  # Display for value 0
+        spinbox.setSuffix(" sec")
+```
+
+## Common Use Cases
+
+### Quantity Input
+
+```python
+ReactiveSpinBox(self, key="quantity", minimum=1, maximum=99)
+```
+
+### Age Input
+
+```python
+ReactiveSpinBox(self, key="age", minimum=0, maximum=120)
+```
+
+### Dimensions
+
+```python
+ReactiveSpinBox(self, key="width", minimum=1, maximum=5000)
+ReactiveSpinBox(self, key="height", minimum=1, maximum=5000)
+```
+
+### Year Selection
+
+```python
+ReactiveSpinBox(self, key="year", minimum=1900, maximum=2100)
+```
+
+### Timeout/Delay Settings
+
+```python
+ReactiveSpinBox(self, key="timeout", minimum=0, maximum=3600)
+```
+
+### Port Number
+
+```python
+ReactiveSpinBox(self, key="port", minimum=1024, maximum=65535)
+```
+
+## Important Notes
+
+- **Integer values only**: SpinBox values are always integers (use QDoubleSpinBox for floats)
+- **Default value**: Defaults to `minimum` if key not found in store
+- **Two-way binding**: Changes flow both ways automatically
+- **Circular update prevention**: Uses `_updating_from_store` flag
+- **Nested key support**: Use dot notation for nested objects
+- **All QSpinBox methods work**: setSingleStep(), setPrefix(), setSuffix(), etc.
+- **Range validation**: Values automatically clamped to min/max range
+- **Keyboard input**: Users can type values directly (validated on focus loss)
+
+## Advanced Features
+
+### Accelerated Stepping
+
+```python
+spinbox = ReactiveSpinBox(self, key="value", minimum=0, maximum=1000)
+spinbox.setAccelerated(True)  # Faster increment when holding button
+```
+
+### Custom Validation
+
+```python
+from PySide6.QtWidgets import QSpinBox
+
+class CustomSpinBox(ReactiveSpinBox):
+    def validate(self, input, pos):
+        # Custom validation logic
+        return QSpinBox.validate(self, input, pos)
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveSlider" icon="sliders" href="/api/reactive-widgets/slider">
+    For graphical numeric input
+  </Card>
+  <Card title="ReactiveLineEdit" icon="input-text" href="/api/reactive-widgets/line-edit">
+    For text input
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

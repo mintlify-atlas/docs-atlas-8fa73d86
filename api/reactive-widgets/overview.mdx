@@ -1,0 +1,128 @@
+---
+title: Reactive Widgets Overview
+description: Automatically synchronized UI components connected to Pydux state management
+---
+
+## What are Reactive Widgets?
+
+Reactive Widgets are Qt widgets that automatically synchronize with your Pydux store. When the store state changes, the UI updates automatically. When users interact with widgets, the store updates automatically.
+
+This eliminates the need for manual state synchronization code and provides a declarative, reactive programming model similar to modern web frameworks.
+
+## How They Work
+
+Each reactive widget:
+
+1. **Connects to a store key** - Widgets bind to a specific key in your Pydux store
+2. **Auto-updates from store** - When store state changes, the widget's `_update_from_store()` method is called
+3. **Updates store on interaction** - User interactions automatically dispatch updates to the store
+4. **Supports nested keys** - Access nested state using dot notation (e.g., `"user.name"`)
+
+## Available Widgets
+
+<CardGroup cols={2}>
+  <Card title="ReactiveLabel" icon="tag" href="/api/reactive-widgets/label">
+    Display text from store with template formatting
+  </Card>
+  <Card title="ReactiveLineEdit" icon="input-text" href="/api/reactive-widgets/line-edit">
+    Single-line text input synchronized with store
+  </Card>
+  <Card title="ReactiveTextEdit" icon="paragraph" href="/api/reactive-widgets/text-edit">
+    Multi-line text editor connected to store
+  </Card>
+  <Card title="ReactiveCheckBox" icon="square-check" href="/api/reactive-widgets/check-box">
+    Boolean checkbox bound to store
+  </Card>
+  <Card title="ReactiveComboBox" icon="list" href="/api/reactive-widgets/combo-box">
+    Dropdown selector with static or dynamic items
+  </Card>
+  <Card title="ReactiveSlider" icon="sliders" href="/api/reactive-widgets/slider">
+    Numeric slider for value selection
+  </Card>
+  <Card title="ReactiveSpinBox" icon="arrow-up-1-9" href="/api/reactive-widgets/spin-box">
+    Numeric input with increment/decrement buttons
+  </Card>
+</CardGroup>
+
+## Basic Usage Pattern
+
+All reactive widgets follow the same pattern:
+
+```python
+from ppg_runtime.application_context import Pydux, PPGLifeCycle
+from ppg_runtime.ReactiveWidgets import ReactiveLabel, ReactiveLineEdit
+from PySide6.QtWidgets import QMainWindow
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Define store schema
+        self.set_schema({
+            "username": str,
+            "count": int,
+        })
+        
+        # Subscribe to store changes
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Create reactive widgets bound to store keys
+        ReactiveLineEdit(self, key="username", placeholder="Enter name")
+        ReactiveLabel(self, key="username")  # Auto-updates when username changes
+```
+
+## Key Features
+
+### Two-Way Data Binding
+
+Widgets automatically synchronize in both directions:
+- Store updates → Widget updates
+- User interaction → Store updates
+
+### Nested State Support
+
+Access nested objects using dot notation:
+
+```python
+self.set_schema({
+    "user": {
+        "name": str,
+        "email": str,
+    }
+})
+
+ReactiveLineEdit(self, key="user.name")
+ReactiveLineEdit(self, key="user.email")
+```
+
+### Change Callbacks
+
+All widgets support optional `onChange` callbacks:
+
+```python
+def on_name_change(value):
+    print(f"Name changed to: {value}")
+
+ReactiveLineEdit(self, key="username", onChange=on_name_change)
+```
+
+### Template Formatting (Labels)
+
+Labels support string formatting from multiple store keys:
+
+```python
+ReactiveLabel(
+    self, 
+    text="Hello {username}, you have {count} items"
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pydux State Management" icon="database" href="/core/pydux">
+    Learn about the underlying state management system
+  </Card>
+  <Card title="Lifecycle Methods" icon="rotate" href="/core/lifecycle">
+    Understand component lifecycle hooks
+  </Card>
+</CardGroup>

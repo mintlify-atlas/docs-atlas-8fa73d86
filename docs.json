@@ -1,122 +1,153 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "PPG",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#04cc44",
+    "light": "#04cc44",
+    "dark": "#04cc44"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/9c0faa47-fc8f-463c-aea3-2a3ef9c50621.svg",
+  "logo": {
+    "light": "https://ik.imagekit.io/kummiktgaiq/ppg/logo_OE3b6z79V.png?updatedAt=1635261532682",
+    "dark": "https://ik.imagekit.io/kummiktgaiq/ppg/logo_OE3b6z79V.png?updatedAt=1635261532682"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Neuri-AI/PPG"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Neuri-AI/PPG"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
+              "installation",
               "quickstart",
-              "development"
+              "your-first-app"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/component-architecture",
+              "concepts/component-lifecycle",
+              "concepts/state-management",
+              "concepts/reactive-widgets",
+              "concepts/hybrid-applications"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "CLI Commands",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "cli/overview",
+              "cli/init",
+              "cli/start",
+              "cli/create",
+              "cli/freeze",
+              "cli/installer",
+              "cli/test",
+              "cli/clean"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Guides",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/project-structure",
+              "guides/creating-components",
+              "guides/working-with-pydux",
+              "guides/building-hybrid-apps",
+              "guides/hot-reloading",
+              "guides/packaging-distribution"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-commands",
+              "advanced/build-settings",
+              "advanced/platform-specific",
+              "advanced/deployment"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/application-context",
+              "api/ppg-lifecycle",
+              "api/decorators"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Pydux State Management",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/pydux/overview",
+              "api/pydux/set-schema",
+              "api/pydux/update-store",
+              "api/pydux/subscribe",
+              "api/pydux/nested-models"
+            ]
+          },
+          {
+            "group": "Reactive Widgets",
+            "pages": [
+              "api/reactive-widgets/overview",
+              "api/reactive-widgets/label",
+              "api/reactive-widgets/line-edit",
+              "api/reactive-widgets/text-edit",
+              "api/reactive-widgets/check-box",
+              "api/reactive-widgets/combo-box",
+              "api/reactive-widgets/slider",
+              "api/reactive-widgets/spin-box"
+            ]
+          },
+          {
+            "group": "Hybrid Apps",
+            "pages": [
+              "api/hybrid/web-engine-bridge",
+              "api/hybrid/bridge-manager"
+            ]
+          },
+          {
+            "group": "Settings & Resources",
+            "pages": [
+              "api/settings",
+              "api/resources",
+              "api/platform"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Example Projects",
+            "pages": [
+              "examples/first-app",
+              "examples/reactive-components",
+              "examples/pydux-store",
+              "examples/multi-screens",
+              "examples/hybrid-app"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

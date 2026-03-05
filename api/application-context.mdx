@@ -1,0 +1,294 @@
+---
+title: 'ApplicationContext'
+description: 'Core application context and lifecycle management'
+icon: 'layer-group'
+---
+
+## Overview
+
+The `ApplicationContext` class is the main point of contact between your application and PPG. It manages the Qt application lifecycle, provides resource access, and handles platform-specific configurations.
+
+## Platform-Specific Contexts
+
+PPG provides platform-specific implementations of `ApplicationContext` that automatically select the appropriate Qt bindings:
+
+### PySide6 Context
+
+```python
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+```
+
+### PyQt5 Context
+
+```python
+from ppg_runtime.application_context.PyQt5 import ApplicationContext
+```
+
+<Note>
+  PPG also supports PySide2 and PyQt6. The framework automatically detects and uses the available Qt binding.
+</Note>
+
+## Class Definition
+
+```python
+class ApplicationContext:
+    def __init__(self)
+    def run(self)
+    def get_resource(self, *rel_path)
+```
+
+## Initialization
+
+The `ApplicationContext` automatically handles:
+- Qt QApplication instantiation
+- Exception handling setup
+- Signal handling (Unix/Linux/macOS)
+- Application icon configuration
+
+```python
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+
+class AppContext(ApplicationContext):
+    def run(self):
+        # Your application startup code
+        window = MainWindow()
+        window.show()
+        return self.app.exec()
+
+if __name__ == '__main__':
+    appctxt = AppContext()
+    exit_code = appctxt.run()
+    sys.exit(exit_code)
+```
+
+## Methods
+
+### __init__()
+
+Initializes the application context.
+
+```python
+def __init__(self)
+```
+
+Automatically:
+- Installs the excepthook
+- Creates the QApplication instance
+- Sets up signal handlers (non-Windows platforms)
+- Configures the application icon
+
+### run()
+
+Starts your application. You must override this method.
+
+```python
+def run(self)
+```
+
+<ResponseField name="return" type="int">
+  Exit code to pass to sys.exit()
+</ResponseField>
+
+**Example:**
+
+```python
+class AppContext(ApplicationContext):
+    def run(self):
+        window = MainWindow()
+        window.show()
+        return self.app.exec()
+```
+
+### get_resource()
+
+Return the absolute path to a data file or resource.
+
+```python
+def get_resource(self, *rel_path)
+```
+
+<ParamField path="rel_path" type="str">
+  Relative path components to the resource file
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Absolute path to the resource file
+</ResponseField>
+
+When running from source, searches `src/main/resources`. When frozen (packaged), searches your app's installation directory.
+
+**Raises:** `FileNotFoundError` if the resource doesn't exist
+
+**Example:**
+
+```python
+# Get path to resources/icon.png
+icon_path = self.get_resource('icon.png')
+
+# Get path to resources/data/config.json
+config_path = self.get_resource('data', 'config.json')
+```
+
+## Properties
+
+### app
+
+The global Qt `QApplication` object for your app.
+
+```python
+@cached_property
+def app(self)
+```
+
+<ResponseField name="return" type="QApplication">
+  The Qt application instance
+</ResponseField>
+
+Automatically sets:
+- Application name from `build_settings['app_name']`
+- Application version from `build_settings['version']`
+
+You can override this property to use your own QApplication subclass:
+
+```python
+class AppContext(ApplicationContext):
+    @cached_property
+    def app(self):
+        result = MyCustomQApplication([])
+        result.setApplicationName(self.build_settings['app_name'])
+        return result
+```
+
+### build_settings
+
+Dictionary containing build settings values.
+
+```python
+@cached_property
+def build_settings(self)
+```
+
+<ResponseField name="return" type="dict">
+  Dictionary with settings from src/build/settings/*.json
+</ResponseField>
+
+Access settings defined in your build configuration:
+
+```python
+app_name = self.build_settings['app_name']
+version = self.build_settings['version']
+```
+
+### app_icon
+
+The application icon (not available on macOS).
+
+```python
+@cached_property
+def app_icon(self)
+```
+
+<ResponseField name="return" type="QIcon | None">
+  QIcon object or None on macOS
+</ResponseField>
+
+Automatically loads from `resources/Icon.ico`.
+
+### exception_handlers
+
+List of exception handlers invoked when errors occur.
+
+```python
+@cached_property
+def exception_handlers(self)
+```
+
+<ResponseField name="return" type="list">
+  List of exception handler objects
+</ResponseField>
+
+Defaults to `[StderrExceptionHandler()]`. Override to add custom error handling:
+
+```python
+class AppContext(ApplicationContext):
+    @cached_property
+    def exception_handlers(self):
+        return [
+            StderrExceptionHandler(),
+            MyCustomExceptionHandler()
+        ]
+```
+
+### excepthook
+
+The exception hook implementation.
+
+```python
+@cached_property
+def excepthook(self)
+```
+
+<ResponseField name="return" type="_Excepthook | None">
+  Excepthook object or None to disable
+</ResponseField>
+
+Set to `None` to completely disable PPG's excepthook:
+
+```python
+class AppContext(ApplicationContext):
+    @cached_property
+    def excepthook(self):
+        return None  # Disable excepthook
+```
+
+### licensing
+
+Implements license key functionality for your application.
+
+```python
+@cached_property
+def licensing(self)
+```
+
+<ResponseField name="return" type="_Licensing">
+  Licensing manager instance
+</ResponseField>
+
+See the [licensing documentation](https://build-system.fman.io/manual#license-keys) for details.
+
+## Complete Example
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from PySide6.QtWidgets import QMainWindow, QLabel
+
+class MainWindow(QMainWindow):
+    def __init__(self, ctx):
+        super().__init__()
+        self.ctx = ctx
+        self.setWindowTitle(ctx.build_settings['app_name'])
+        
+        # Load a resource
+        icon_path = ctx.get_resource('icon.png')
+        
+        label = QLabel(f"Version: {ctx.build_settings['version']}")
+        self.setCentralWidget(label)
+
+class AppContext(ApplicationContext):
+    def run(self):
+        self.window = MainWindow(self)
+        self.window.show()
+        return self.app.exec()
+
+if __name__ == '__main__':
+    appctxt = AppContext()
+    exit_code = appctxt.run()
+    sys.exit(exit_code)
+```
+
+## See Also
+
+- [PPGLifeCycle](/api/ppg-lifecycle) - Component lifecycle methods
+- [Decorators](/api/decorators) - Framework decorators
+- [Build Settings](/advanced/build-settings) - Build settings reference

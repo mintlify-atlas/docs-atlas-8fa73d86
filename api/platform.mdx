@@ -1,0 +1,340 @@
+---
+title: 'Platform API'
+description: 'Detect and handle platform-specific code'
+icon: 'desktop'
+---
+
+## Overview
+
+The platform module provides functions to detect the current operating system and write platform-specific code. This is essential for handling OS differences in your application.
+
+## Platform Detection Functions
+
+### is_windows()
+
+Check if the current OS is Windows.
+
+```python
+from ppg_runtime.platform import is_windows
+
+if is_windows():
+    print("Running on Windows")
+```
+
+**Returns:** `bool` - `True` if running on Windows, `False` otherwise
+
+### is_mac()
+
+Check if the current OS is macOS.
+
+```python
+from ppg_runtime.platform import is_mac
+
+if is_mac():
+    print("Running on macOS")
+```
+
+**Returns:** `bool` - `True` if running on macOS, `False` otherwise
+
+### is_linux()
+
+Check if the current OS is Linux.
+
+```python
+from ppg_runtime.platform import is_linux
+
+if is_linux():
+    print("Running on Linux")
+```
+
+**Returns:** `bool` - `True` if running on Linux, `False` otherwise
+
+## Linux Distribution Detection
+
+### is_ubuntu()
+
+Check if running on Ubuntu or Ubuntu-based distributions.
+
+```python
+from ppg_runtime.platform import is_ubuntu
+
+if is_ubuntu():
+    print("Running on Ubuntu/Mint/Pop!_OS")
+```
+
+**Returns:** `bool` - `True` if running on Ubuntu, Linux Mint, or Pop!_OS
+
+**Note:** Returns `False` if `/etc/os-release` is not found
+
+### is_arch_linux()
+
+Check if running on Arch Linux or Arch-based distributions.
+
+```python
+from ppg_runtime.platform import is_arch_linux
+
+if is_arch_linux():
+    print("Running on Arch/Manjaro")
+```
+
+**Returns:** `bool` - `True` if running on Arch Linux or Manjaro Linux
+
+**Note:** Returns `False` if `/etc/os-release` is not found
+
+### is_fedora()
+
+Check if running on Fedora or Fedora-based distributions.
+
+```python
+from ppg_runtime.platform import is_fedora
+
+if is_fedora():
+    print("Running on Fedora/CentOS")
+```
+
+**Returns:** `bool` - `True` if running on Fedora or CentOS Linux
+
+**Note:** Returns `False` if `/etc/os-release` is not found
+
+## Desktop Environment Detection
+
+### is_gnome_based()
+
+Check if running on a GNOME-based desktop environment.
+
+```python
+from ppg_runtime.platform import is_gnome_based
+
+if is_gnome_based():
+    print("Running on GNOME/Unity/Cinnamon")
+```
+
+**Returns:** `bool` - `True` if running on Unity, GNOME, or Cinnamon desktop
+
+**Note:** Uses the `XDG_CURRENT_DESKTOP` environment variable
+
+### is_kde_based()
+
+Check if running on a KDE-based desktop environment.
+
+```python
+from ppg_runtime.platform import is_kde_based
+
+if is_kde_based():
+    print("Running on KDE desktop")
+```
+
+**Returns:** `bool` - `True` if running on KDE desktop
+
+**Note:** Checks both `XDG_CURRENT_DESKTOP` and `GDMSESSION` environment variables
+
+## Platform-Specific Code Patterns
+
+### Example: Platform-Specific Imports
+
+```python
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+
+if is_windows():
+    import winreg
+    import ctypes
+elif is_mac():
+    import objc
+    from AppKit import NSApplication
+elif is_linux():
+    import subprocess
+```
+
+### Example: Platform-Specific Paths
+
+```python
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+import os
+from os.path import join, expanduser
+
+def get_config_dir():
+    """Get the platform-specific config directory."""
+    if is_windows():
+        return join(os.getenv('APPDATA'), 'MyApp')
+    elif is_mac():
+        return join(expanduser('~'), 'Library', 'Application Support', 'MyApp')
+    elif is_linux():
+        return join(expanduser('~'), '.config', 'myapp')
+
+config_dir = get_config_dir()
+print(f"Config directory: {config_dir}")
+```
+
+### Example: Platform-Specific Commands
+
+```python
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+import subprocess
+
+def open_url(url):
+    """Open URL in default browser."""
+    if is_windows():
+        subprocess.run(['cmd', '/c', 'start', url], check=True)
+    elif is_mac():
+        subprocess.run(['open', url], check=True)
+    elif is_linux():
+        subprocess.run(['xdg-open', url], check=True)
+
+open_url('https://example.com')
+```
+
+### Example: Linux Distribution-Specific Code
+
+```python
+from ppg_runtime.platform import is_ubuntu, is_arch_linux, is_fedora
+
+def get_package_manager():
+    """Get the system package manager command."""
+    if is_ubuntu():
+        return 'apt'
+    elif is_arch_linux():
+        return 'pacman'
+    elif is_fedora():
+        return 'dnf'
+    else:
+        return None
+
+pkg_manager = get_package_manager()
+if pkg_manager:
+    print(f"Package manager: {pkg_manager}")
+```
+
+### Example: Desktop Environment Integration
+
+```python
+from ppg_runtime.platform import is_gnome_based, is_kde_based
+
+def setup_desktop_integration():
+    """Set up desktop environment integration."""
+    if is_gnome_based():
+        # Use GNOME-specific features
+        print("Setting up GNOME integration")
+        setup_gnome_notifications()
+    elif is_kde_based():
+        # Use KDE-specific features
+        print("Setting up KDE integration")
+        setup_kde_notifications()
+    else:
+        # Fallback for other desktops
+        print("Using generic desktop integration")
+        setup_generic_notifications()
+```
+
+### Example: Conditional Resource Loading
+
+```python
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+from ppg import path
+
+def get_icon_path():
+    """Get platform-specific icon."""
+    if is_windows():
+        return path('src/main/icons/windows/app.ico')
+    elif is_mac():
+        return path('src/main/icons/mac/app.icns')
+    elif is_linux():
+        return path('src/main/icons/linux/app.png')
+
+icon = get_icon_path()
+print(f"Icon: {icon}")
+```
+
+## Complete Example
+
+```python
+from ppg_runtime.platform import (
+    is_windows, is_mac, is_linux,
+    is_ubuntu, is_arch_linux, is_fedora,
+    is_gnome_based, is_kde_based
+)
+import sys
+
+def get_system_info():
+    """Get detailed system information."""
+    info = {
+        'os': None,
+        'distribution': None,
+        'desktop': None
+    }
+    
+    # Detect OS
+    if is_windows():
+        info['os'] = 'Windows'
+    elif is_mac():
+        info['os'] = 'macOS'
+    elif is_linux():
+        info['os'] = 'Linux'
+        
+        # Detect Linux distribution
+        if is_ubuntu():
+            info['distribution'] = 'Ubuntu-based'
+        elif is_arch_linux():
+            info['distribution'] = 'Arch-based'
+        elif is_fedora():
+            info['distribution'] = 'Fedora-based'
+        else:
+            info['distribution'] = 'Other'
+        
+        # Detect desktop environment
+        if is_gnome_based():
+            info['desktop'] = 'GNOME-based'
+        elif is_kde_based():
+            info['desktop'] = 'KDE-based'
+        else:
+            info['desktop'] = 'Other'
+    
+    return info
+
+def setup_platform_specific():
+    """Set up platform-specific configuration."""
+    info = get_system_info()
+    
+    print(f"Operating System: {info['os']}")
+    
+    if info['os'] == 'Windows':
+        # Windows-specific setup
+        print("Configuring for Windows...")
+        setup_windows_features()
+        
+    elif info['os'] == 'macOS':
+        # macOS-specific setup
+        print("Configuring for macOS...")
+        setup_mac_features()
+        
+    elif info['os'] == 'Linux':
+        # Linux-specific setup
+        print(f"Distribution: {info['distribution']}")
+        print(f"Desktop: {info['desktop']}")
+        setup_linux_features(info)
+
+def setup_windows_features():
+    """Configure Windows-specific features."""
+    # Add Windows-specific code
+    pass
+
+def setup_mac_features():
+    """Configure macOS-specific features."""
+    # Add macOS-specific code
+    pass
+
+def setup_linux_features(info):
+    """Configure Linux-specific features."""
+    # Add Linux-specific code based on distribution and desktop
+    pass
+
+if __name__ == '__main__':
+    setup_platform_specific()
+```
+
+## Best Practices
+
+1. **Use platform detection early** - Check platform once at startup, not repeatedly
+2. **Provide fallbacks** - Always have a default case for unknown platforms
+3. **Test on all platforms** - Don't assume behavior is the same across OSes
+4. **Use abstractions** - Create wrapper functions for platform-specific code
+5. **Document platform requirements** - Note which features are platform-specific

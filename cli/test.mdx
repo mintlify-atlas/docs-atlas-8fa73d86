@@ -1,0 +1,480 @@
+---
+title: ppg test
+description: Run your project's automated test suite
+---
+
+## Overview
+
+The `ppg test` command executes your application's automated tests using Python's built-in `unittest` framework.
+
+```bash
+ppg test
+```
+
+<Info>
+PPG automatically discovers and runs all test modules in your configured test directories.
+</Info>
+
+## Basic Usage
+
+### Run All Tests
+
+```bash
+$ ppg test
+
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.045s
+
+OK
+```
+
+### Test Output
+
+The test runner provides detailed output:
+
+```bash
+$ ppg test
+
+test_component_mount (test_components.TestMyComponent) ... ok
+test_state_update (test_components.TestMyComponent) ... ok
+test_render (test_components.TestMyComponent) ... FAIL
+
+======================================================================
+FAIL: test_render (test_components.TestMyComponent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "tests/test_components.py", line 25, in test_render
+    self.assertEqual(component.text(), "Expected Text")
+AssertionError: 'Actual Text' != 'Expected Text'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.052s
+
+FAIL (failures=1)
+```
+
+## Test Directory Structure
+
+By default, PPG looks for tests in:
+
+```
+project-root/
+├── src/
+│   └── ...
+└── tests/                    # Default test directory
+    ├── __init__.py          # Required!
+    ├── test_components.py   # Component tests
+    ├── test_views.py        # View tests
+    └── test_integration.py  # Integration tests
+```
+
+<Warning>
+**Important**: Each test directory must contain an `__init__.py` file (can be empty) for Python to recognize it as a package.
+</Warning>
+
+## Test Configuration
+
+Test directories are configured in `src/build/settings/base.json`:
+
+```json
+{
+  "test_dirs": [
+    "tests",
+    "src/test/python"
+  ]
+}
+```
+
+<Info>
+**Multiple Test Directories**: You can specify multiple directories to organize tests by category (unit, integration, e2e).
+</Info>
+
+## Writing Tests
+
+### Basic Test Structure
+
+PPG uses Python's `unittest` framework:
+
+```python
+# tests/test_components.py
+import unittest
+from components.MyComponent import MyComponent
+
+class TestMyComponent(unittest.TestCase):
+
+    def setUp(self):
+        """Runs before each test method"""
+        self.component = MyComponent()
+
+    def tearDown(self):
+        """Runs after each test method"""
+        self.component.deleteLater()
+
+    def test_initialization(self):
+        """Test component initializes correctly"""
+        self.assertIsNotNone(self.component)
+        self.assertEqual(self.component.width(), 0)
+
+    def test_render(self):
+        """Test rendering updates UI"""
+        self.component.render_()
+        self.assertTrue(self.component.isVisible())
+```
+
+### Testing Components
+
+```python
+# tests/test_button_component.py
+import unittest
+from PySide6.QtWidgets import QApplication
+from components.CustomButton import CustomButton
+import sys
+
+app = QApplication.instance() or QApplication(sys.argv)
+
+class TestCustomButton(unittest.TestCase):
+
+    def setUp(self):
+        self.button = CustomButton()
+
+    def test_component_will_mount(self):
+        """Test lifecycle hook"""
+        self.button.component_will_mount()
+        # Assert store subscription
+        self.assertTrue(hasattr(self.button, 'store'))
+
+    def test_render(self):
+        """Test render method"""
+        self.button.render_()
+        self.assertEqual(self.button.text(), "Click Me")
+
+    def test_click_handler(self):
+        """Test button click"""
+        clicked = False
+        
+        def on_click():
+            nonlocal clicked
+            clicked = True
+        
+        self.button.clicked.connect(on_click)
+        self.button.click()
+        self.assertTrue(clicked)
+```
+
+### Testing with Pydux
+
+```python
+# tests/test_pydux_integration.py
+import unittest
+from ppg_runtime.application_context import Store
+from components.UserCard import UserCard
+
+class TestPyduxIntegration(unittest.TestCase):
+
+    def setUp(self):
+        self.store = Store()
+        self.store.initial_state({
+            "user": {
+                "name": "John Doe",
+                "email": "john@example.com"
+            }
+        })
+        self.card = UserCard()
+        self.card.store = self.store
+
+    def test_state_subscription(self):
+        """Test component subscribes to store"""
+        self.card.component_will_mount()
+        self.assertIn(self.card, self.store.subscribers)
+
+    def test_state_update_triggers_render(self):
+        """Test render is called on state change"""
+        self.card.component_will_mount()
+        render_called = False
+        
+        original_render = self.card.render_
+        def tracked_render():
+            nonlocal render_called
+            render_called = True
+            original_render()
+        
+        self.card.render_ = tracked_render
+        
+        # Update state
+        self.store.update_nested("user.name", "Jane Doe")
+        
+        self.assertTrue(render_called)
+```
+
+## Test Discovery
+
+PPG automatically discovers tests using these rules:
+
+1. **Test Directories**: Searches all directories in `test_dirs` setting
+2. **Package Detection**: Only includes directories with `__init__.py`
+3. **Test Modules**: Discovers all files matching `test*.py`
+4. **Test Classes**: Finds all classes inheriting from `unittest.TestCase`
+5. **Test Methods**: Runs all methods starting with `test_`
+
+### Example Discovery
+
+```
+tests/
+├── __init__.py              ✅ Discovered
+├── test_components.py       ✅ Discovered
+│   └── TestMyComponent      ✅ Discovered
+│       └── test_render()    ✅ Runs
+├── test_views.py            ✅ Discovered
+├── utils.py                 ❌ Skipped (doesn't start with test_)
+└── helpers/
+    ├── __init__.py          ✅ Discovered
+    └── test_helpers.py      ✅ Discovered
+```
+
+## Running Tests
+
+### Run All Tests
+
+```bash
+ppg test
+```
+
+### No Tests Found
+
+If no tests are found:
+
+```bash
+$ ppg test
+
+Warning: No tests found. You can add them to:
+ * tests
+ * src/test/python
+```
+
+This happens when:
+- Test directories don't exist
+- Test directories are missing `__init__.py`
+- No files match `test*.py` pattern
+- No classes inherit from `unittest.TestCase`
+
+## Test Organization
+
+### By Feature
+
+```
+tests/
+├── __init__.py
+├── test_user_components.py
+├── test_dashboard_components.py
+└── test_settings_views.py
+```
+
+### By Test Type
+
+```
+tests/
+├── __init__.py
+├── unit/
+│   ├── __init__.py
+│   ├── test_components.py
+│   └── test_models.py
+├── integration/
+│   ├── __init__.py
+│   └── test_workflows.py
+└── e2e/
+    ├── __init__.py
+    └── test_user_flows.py
+```
+
+## Assertions
+
+Common `unittest` assertions:
+
+```python
+# Equality
+self.assertEqual(a, b)
+self.assertNotEqual(a, b)
+
+# Identity
+self.assertIs(a, b)
+self.assertIsNot(a, b)
+
+# Boolean
+self.assertTrue(x)
+self.assertFalse(x)
+
+# Null checks
+self.assertIsNone(x)
+self.assertIsNotNone(x)
+
+# Membership
+self.assertIn(a, b)
+self.assertNotIn(a, b)
+
+# Type checks
+self.assertIsInstance(a, MyClass)
+
+# Exceptions
+with self.assertRaises(ValueError):
+    risky_function()
+```
+
+## Qt Testing Tips
+
+### QApplication Singleton
+
+Qt requires a QApplication instance:
+
+```python
+import sys
+from PySide6.QtWidgets import QApplication
+
+# Create once at module level
+app = QApplication.instance() or QApplication(sys.argv)
+
+class TestMyComponent(unittest.TestCase):
+    # Your tests...
+```
+
+### Testing Signals
+
+```python
+def test_signal_emission(self):
+    """Test component emits signal"""
+    signal_received = False
+    
+    def on_signal(value):
+        nonlocal signal_received
+        signal_received = True
+    
+    self.component.my_signal.connect(on_signal)
+    self.component.trigger_signal()
+    
+    self.assertTrue(signal_received)
+```
+
+### Cleaning Up
+
+```python
+def tearDown(self):
+    """Clean up Qt objects"""
+    self.component.deleteLater()
+    # Process events to ensure cleanup
+    QApplication.processEvents()
+```
+
+## Implementation Details
+
+The `test` command (from `builtin_commands/__init__.py:591-619`):
+
+1. **Adds** `src/main/python` to Python path for imports
+2. **Creates** empty test suite
+3. **Iterates** through configured test directories
+4. **Discovers** test modules in each directory
+5. **Adds** discovered tests to suite
+6. **Runs** tests with `TextTestRunner`
+7. **Displays** results
+
+```python
+@command
+def test():
+    """
+    Execute your automated tests
+    """
+    require_existing_project()
+    sys.path.append(path('src/main/python'))
+    suite = TestSuite()
+    test_dirs = SETTINGS['test_dirs']
+    for test_dir in map(path, test_dirs):
+        sys.path.append(test_dir)
+        try:
+            dir_names = listdir(test_dir)
+        except FileNotFoundError:
+            continue
+        for dir_name in dir_names:
+            dir_path = join(test_dir, dir_name)
+            if isfile(join(dir_path, '__init__.py')):
+                suite.addTest(defaultTestLoader.discover(
+                    dir_name, top_level_dir=test_dir
+                ))
+    has_tests = bool(list(suite))
+    if has_tests:
+        TextTestRunner().run(suite)
+    else:
+        _LOG.warning(
+            'No tests found. You can add them to:\n * '+
+            '\n * '.join(test_dirs)
+        )
+```
+
+## Continuous Integration
+
+Integrate tests into CI/CD:
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+      - run: pip install ppg
+      - run: ppg test
+```
+
+### GitLab CI
+
+```yaml
+# .gitlab-ci.yml
+test:
+  stage: test
+  image: python:3.11
+  script:
+    - pip install ppg
+    - ppg test
+```
+
+## Best Practices
+
+<Tip>
+**Test Early, Test Often**: Write tests as you develop features. It's easier than adding tests later.
+</Tip>
+
+<Tip>
+**One Assert Per Test**: Keep tests focused with a single assertion when possible.
+</Tip>
+
+<Tip>
+**Use setUp and tearDown**: Initialize and clean up test fixtures properly.
+</Tip>
+
+<Warning>
+**Don't Forget __init__.py**: Test directories without `__init__.py` will be ignored!
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Component Testing" icon="vial" href="/advanced/testing">
+    Deep dive into testing strategies
+  </Card>
+  <Card title="CI/CD Integration" icon="server" href="/advanced/ci-cd">
+    Automate testing in your pipeline
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg start](/cli/start) - Run your app after tests pass
+- [Component Lifecycle](/api/ppg-lifecycle) - Understanding lifecycle for tests
+- [Pydux Testing](/api/pydux/overview) - Testing state management

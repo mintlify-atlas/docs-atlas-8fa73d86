@@ -1,0 +1,401 @@
+---
+title: Working with Pydux
+description: Centralized state management with Pydux - PPG's Redux-inspired store with Pydantic validation
+---
+
+Pydux is PPG's state management system inspired by Redux. It provides a centralized, reactive store with built-in type validation using Pydantic models. Any component can read from and write to the store, and subscribed components automatically update when the store changes.
+
+## Why Pydux?
+
+- **Centralized State**: Single source of truth for your application data
+- **Type Safety**: Automatic validation with Pydantic models
+- **Reactive**: Components automatically update when relevant data changes
+- **Predictable**: Clear patterns for reading and updating state
+- **Developer Experience**: Rich error messages and validation feedback
+
+## Getting Started
+
+<Steps>
+  <Step title="Import Pydux">
+    ```python
+    from ppg_runtime.application_context import Pydux, PPGLifeCycle, init_lifecycle
+    from PySide6.QtWidgets import QMainWindow
+    ```
+  </Step>
+
+  <Step title="Inherit from Pydux">
+    ```python
+    @init_lifecycle
+    class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+        pass
+    ```
+  </Step>
+
+  <Step title="Subscribe to the store">
+    ```python
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    ```
+  </Step>
+</Steps>
+
+## Setting Up the Schema
+
+Define your store's structure using `set_schema()`. This creates a Pydantic model that validates all updates:
+
+```python
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Define the store schema
+        self.set_schema({
+            "username": str,
+            "age": int,
+            "is_logged_in": bool,
+            "settings": dict,
+            "favorites": list
+        })
+```
+
+<Note>
+  The schema should be set only once, typically in your main application component's `component_will_mount()`. All components share the same global store.
+</Note>
+
+## Updating the Store
+
+Use `update_store()` to modify state:
+
+```python
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        self.set_schema({
+            "greeting": str,
+            "count": int
+        })
+
+    def render_(self):
+        self.button = QPushButton('Click me', self)
+        self.button.clicked.connect(self.on_click)
+
+    def on_click(self):
+        # Update single field
+        self.update_store({"greeting": "Hello, World!"})
+        
+        # Update multiple fields
+        self.update_store({
+            "greeting": "Welcome!",
+            "count": 1
+        })
+```
+
+## Subscribing to Changes
+
+Implement `on_store_change()` to react when the store updates:
+
+```python
+@init_lifecycle
+class UserProfile(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+
+    def render_(self):
+        self.name_label = QLabel(self)
+        self.email_label = QLabel(self)
+
+    def on_store_change(self, store):
+        # Access store data using dot notation
+        self.name_label.setText(store.username or "Guest")
+        self.email_label.setText(store.email or "No email")
+        
+        # Check if specific field exists
+        if self.has_key('is_logged_in') and store.is_logged_in:
+            self.show_user_menu()
+```
+
+<Note>
+  When using a schema, the `store` parameter in `on_store_change()` is a Pydantic model instance. Access fields using dot notation: `store.username`, `store.age`, etc.
+</Note>
+
+## Reading Store Data
+
+Access the current store state using the `store` property:
+
+```python
+# Get entire store as dict
+current_state = self.store
+print(current_state)  # {'username': 'john', 'age': 30, ...}
+
+# Get specific value
+username = self.store.get('username', 'Guest')
+age = self.store.get('age', 0)
+
+# Check if key exists
+if self.has_key('user_id'):
+    user_id = self.store['user_id']
+```
+
+## Working with Nested Models
+
+For complex data structures, use Pydantic models:
+
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+# Define nested models
+class UserSettings(BaseModel):
+    theme: str = "light"
+    notifications: bool = True
+    language: str = "en"
+
+class User(BaseModel):
+    id: int
+    username: str
+    email: str
+    settings: Optional[UserSettings] = None
+
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Use Pydantic models in schema
+        self.set_schema({
+            "user": User,
+            "is_loading": bool
+        })
+
+    def load_user(self, user_id):
+        # Update with nested model
+        user = User(
+            id=user_id,
+            username="john_doe",
+            email="john@example.com",
+            settings=UserSettings(
+                theme="dark",
+                notifications=True,
+                language="en"
+            )
+        )
+        self.update_store({"user": user})
+
+    def on_store_change(self, store):
+        if store.user:
+            # Access nested fields
+            print(f"User: {store.user.username}")
+            print(f"Theme: {store.user.settings.theme}")
+```
+
+## Partial Updates to Nested Models
+
+Update specific fields in a nested model without replacing the entire object:
+
+```python
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def toggle_theme(self):
+        # Update only the theme field in user.settings
+        self.update_nested_model("user", {
+            "settings": {
+                "theme": "dark" if self.store.get("user", {}).get("settings", {}).get("theme") == "light" else "light"
+            }
+        })
+
+    def enable_notifications(self):
+        # Partial update to nested model
+        current_user = self.store.get("user")
+        if current_user and current_user.settings:
+            updated_settings = current_user.settings.model_copy(
+                update={"notifications": True}
+            )
+            self.update_store({
+                "user": current_user.model_copy(
+                    update={"settings": updated_settings}
+                )
+            })
+```
+
+## Advanced Features
+
+<Accordion title="Get Nested Values">
+  Use `get_nested()` to access deeply nested values with dot notation:
+
+  ```python
+  # Instead of:
+  theme = self.store.get('user', {}).get('settings', {}).get('theme')
+
+  # Use:
+  theme = self.get_nested('user.settings.theme')
+  ```
+</Accordion>
+
+<Accordion title="Remove from Store">
+  ```python
+  # Remove a key from the store
+  self.remove_from_store('temporary_data')
+
+  # Check if key exists before removing
+  if self.has_key('cache'):
+      self.remove_from_store('cache')
+  ```
+</Accordion>
+
+<Accordion title="Clear Store">
+  ```python
+  # Reset store to initial state
+  self.clear_store()
+  ```
+</Accordion>
+
+<Accordion title="Unsubscribe from Store">
+  ```python
+  # Stop receiving store updates
+  def cleanup(self):
+      self.unsubscribe_from_store(self)
+  ```
+</Accordion>
+
+## Type Safety and Validation
+
+Pydux automatically validates data against your schema:
+
+```python
+self.set_schema({
+    "age": int,
+    "email": str
+})
+
+# This works
+self.update_store({"age": 25})
+
+# This raises a ValidationError
+self.update_store({"age": "twenty-five"})  # TypeError: Validation error
+```
+
+## Complete Working Example
+
+Here's a full application demonstrating Pydux:
+
+```python
+import sys
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from ppg_runtime.application_context.devtools.reloader import hot_reloading
+from PySide6.QtWidgets import QMainWindow, QTextEdit, QLabel
+from pydantic import BaseModel
+
+class AppState(BaseModel):
+    text: str = ""
+    word_count: int = 0
+    char_count: int = 0
+
+@init_lifecycle
+@hot_reloading
+class TextEditor(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Define schema
+        self.set_schema({
+            "app_state": AppState
+        })
+        
+        # Initialize with default state
+        self.update_store({
+            "app_state": AppState()
+        })
+
+    def render_(self):
+        # Create UI
+        self.status_label = QLabel('Ready', self)
+        self.editor = QTextEdit(self)
+        self.editor.setPlaceholderText('Start typing...')
+        
+        # Connect events
+        self.editor.textChanged.connect(self.on_text_changed)
+
+    def on_text_changed(self):
+        text = self.editor.toPlainText()
+        
+        # Update store with new text and stats
+        self.update_nested_model("app_state", {
+            "text": text,
+            "word_count": len(text.split()),
+            "char_count": len(text)
+        })
+
+    def on_store_change(self, store):
+        # Update UI when store changes
+        if store.app_state:
+            state = store.app_state
+            self.status_label.setText(
+                f"Words: {state.word_count} | Characters: {state.char_count}"
+            )
+            self.status_label.adjustSize()
+
+    def responsive_UI(self):
+        self.setMinimumSize(800, 600)
+        self.status_label.move(20, 20)
+        self.editor.setGeometry(20, 60, self.width() - 40, self.height() - 80)
+
+if __name__ == '__main__':
+    appctxt = ApplicationContext()
+    window = TextEditor()
+    window.show()
+    exec_func = getattr(appctxt.app, 'exec', appctxt.app.exec_)
+    sys.exit(exec_func())
+```
+
+## Pydux vs Local State
+
+**Use Pydux for:**
+- Data shared across multiple components
+- Application-level state (user, settings, etc.)
+- Data that needs to persist across navigation
+- Complex data that benefits from validation
+
+**Use local state for:**
+- Component-specific UI state (hover, focus, etc.)
+- Temporary data (form input before submission)
+- Data that doesn't need to be shared
+
+```python
+@init_lifecycle
+class SearchBox(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Local state - not in Pydux
+        self.is_focused = False
+        self.suggestions = []
+        
+        # Subscribe for shared state
+        self.subscribe_to_store(self)
+
+    def on_text_changed(self, text):
+        # Update local state
+        self.suggestions = fetch_suggestions(text)
+        
+        # Update global store when search is submitted
+        if text.endswith('\n'):
+            self.update_store({"search_query": text.strip()})
+```
+
+## Best Practices
+
+1. **Define schema early**: Set up your store schema in the main component's `component_will_mount()`
+2. **Use Pydantic models**: For complex data, create proper models with validation
+3. **Update immutably**: Don't modify store objects directly; use `update_store()`
+4. **Keep store flat**: Avoid deeply nested structures when possible
+5. **Unsubscribe when needed**: Clean up subscriptions to prevent memory leaks
+6. **Type your schema**: Use proper Python types for better IDE support
+
+<Note>
+  Pydux is a singleton - there's one global store shared across your entire application. All components that inherit from Pydux access the same store instance.
+</Note>
+
+## Next Steps
+
+- [Creating Components](/guides/creating-components) - Build reactive components
+- [Hot Reloading](/guides/hot-reloading) - Develop faster with instant updates
+- [Building Hybrid Apps](/guides/building-hybrid-apps) - Share state with web views

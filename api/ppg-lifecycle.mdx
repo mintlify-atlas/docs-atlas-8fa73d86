@@ -1,0 +1,467 @@
+---
+title: 'PPGLifeCycle'
+description: 'Component lifecycle methods and hooks'
+icon: 'rotate'
+---
+
+## Overview
+
+The `PPGLifeCycle` mixin class provides lifecycle methods and utilities for PPG components. It follows a React-like component lifecycle pattern with methods called at specific stages of a component's life.
+
+## Class Definition
+
+```python
+class PPGLifeCycle:
+    def component_will_mount(self)
+    def allow_bg(self)
+    def render_(self)
+    def component_did_mount(self)
+    def set_CSS(self, path=None)
+    def responsive_UI(self)
+    def resizeEvent(self, e=None)
+```
+
+## Lifecycle Flow
+
+When using the `@init_lifecycle` decorator, methods are called in this order:
+
+1. `component_will_mount()` - Setup before rendering
+2. `allow_bg()` - Enable styled backgrounds
+3. `render_()` - Build the UI
+4. `component_did_mount()` - Setup after rendering
+5. `set_CSS()` - Apply stylesheets
+6. `responsive_UI()` - Handle responsive layout
+
+<Note>
+  The `@init_lifecycle` decorator automatically calls these methods in the correct order during `__init__()`.
+</Note>
+
+## Lifecycle Methods
+
+### component_will_mount()
+
+Called before the component renders. Use for initial state setup.
+
+```python
+def component_will_mount(self)
+```
+
+**Example:**
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def component_will_mount(self):
+        self.data = []
+        self.is_loading = False
+        print("Component will mount")
+```
+
+### allow_bg()
+
+Enables styled background for the widget. Automatically sets the `Qt.WA_StyledBackground` attribute.
+
+```python
+def allow_bg(self)
+```
+
+This allows CSS background colors and styles to work properly:
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def set_CSS(self):
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f0f0f0;  /* This works because of allow_bg() */
+            }
+        """)
+```
+
+<Note>
+  This method is automatically called by the `@init_lifecycle` decorator. You typically don't need to call it manually.
+</Note>
+
+### render_()
+
+Builds the component's UI. This is where you create and add widgets.
+
+```python
+def render_(self)
+```
+
+**Example:**
+
+```python
+from PySide6.QtWidgets import QVBoxLayout, QLabel, QPushButton
+
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def render_(self):
+        layout = QVBoxLayout()
+        
+        self.title = QLabel("Hello World")
+        self.button = QPushButton("Click Me")
+        
+        layout.addWidget(self.title)
+        layout.addWidget(self.button)
+        
+        self.setLayout(layout)
+```
+
+<Warning>
+  Always create a fresh UI in `render_()`. When hot reloading or re-rendering, this method may be called multiple times.
+</Warning>
+
+### component_did_mount()
+
+Called after the component has rendered. Use for setup that requires the DOM to exist.
+
+```python
+def component_did_mount(self)
+```
+
+**Example:**
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def component_did_mount(self):
+        # Connect signals after widgets are created
+        self.button.clicked.connect(self.handle_click)
+        
+        # Fetch initial data
+        self.load_data()
+        
+        # Start timers
+        self.timer.start(1000)
+```
+
+### set_CSS()
+
+Applies CSS stylesheets to the component.
+
+```python
+def set_CSS(self, path=None)
+```
+
+<ParamField path="path" type="str" optional>
+  Optional path to a CSS file. If None, define styles inline.
+</ParamField>
+
+**Inline styles:**
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def set_CSS(self):
+        self.setStyleSheet("""
+            QWidget {
+                background-color: white;
+            }
+            QLabel {
+                color: #333;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                border-radius: 4px;
+                padding: 8px 16px;
+            }
+        """)
+```
+
+**External stylesheet:**
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def set_CSS(self):
+        css_path = self.get_resource('styles', 'component.css')
+        with open(css_path, 'r') as f:
+            self.setStyleSheet(f.read())
+```
+
+### responsive_UI()
+
+Handles responsive layout changes. Called during initialization and on resize events.
+
+```python
+def responsive_UI(self)
+```
+
+**Example:**
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def responsive_UI(self):
+        width = self.width()
+        
+        if width < 600:
+            # Mobile layout
+            self.title.setStyleSheet("font-size: 14px;")
+            self.sidebar.hide()
+        elif width < 1024:
+            # Tablet layout
+            self.title.setStyleSheet("font-size: 16px;")
+            self.sidebar.show()
+        else:
+            # Desktop layout
+            self.title.setStyleSheet("font-size: 18px;")
+            self.sidebar.show()
+```
+
+### resizeEvent()
+
+Qt resize event handler. Automatically calls `responsive_UI()`.
+
+```python
+def resizeEvent(self, e=None)
+```
+
+<ParamField path="e" type="QResizeEvent" optional>
+  Qt resize event object
+</ParamField>
+
+<Note>
+  This method is automatically handled by PPGLifeCycle. Override it if you need custom resize behavior, but remember to call `super().resizeEvent(e)`.
+</Note>
+
+## Utility Methods
+
+### get_resource()
+
+Get the absolute path to a resource file.
+
+```python
+def get_resource(self, *rel_path)
+```
+
+<ParamField path="rel_path" type="str">
+  Relative path components to the resource
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Absolute path to the resource file
+</ResponseField>
+
+**Example:**
+
+```python
+icon_path = self.get_resource('icons', 'app.png')
+data_file = self.get_resource('data', 'config.json')
+```
+
+### destroyComponent()
+
+Safely destroys the component.
+
+```python
+def destroyComponent(self)
+```
+
+Removes the component from its parent and schedules it for deletion:
+
+```python
+self.old_widget.destroyComponent()
+```
+
+### find()
+
+Find a child widget by type and name.
+
+```python
+def find(self, type, name)
+```
+
+<ParamField path="type" type="type">
+  The Qt widget class to search for
+</ParamField>
+
+<ParamField path="name" type="str">
+  The object name of the widget
+</ParamField>
+
+<ResponseField name="return" type="QWidget | None">
+  The found widget or None
+</ResponseField>
+
+**Example:**
+
+```python
+# Find a button named "submit_btn"
+submit_button = self.find(QPushButton, "submit_btn")
+```
+
+### calc()
+
+Calculate percentage-based values for responsive layouts.
+
+```python
+@staticmethod
+def calc(a, b)
+```
+
+<ParamField path="a" type="int">
+  Base value (e.g., parent width)
+</ParamField>
+
+<ParamField path="b" type="int">
+  Percentage (0-100)
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Calculated value: (a * b) / 100
+</ResponseField>
+
+**Example:**
+
+```python
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def responsive_UI(self):
+        # Widget takes 80% of parent width
+        self.content.setFixedWidth(self.calc(self.width(), 80))
+        
+        # Widget takes 50% of parent height
+        self.sidebar.setFixedHeight(self.calc(self.height(), 50))
+```
+
+## Properties
+
+### build_settings
+
+Access build configuration settings.
+
+```python
+@cached_property
+def build_settings(self)
+```
+
+<ResponseField name="return" type="dict">
+  Dictionary with build settings
+</ResponseField>
+
+**Example:**
+
+```python
+app_name = self.build_settings['app_name']
+version = self.build_settings['version']
+```
+
+## Complete Example
+
+```python
+import sys
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from ppg_runtime.application_context.PySide6 import ApplicationContext
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, 
+    QLabel, QPushButton
+)
+
+@init_lifecycle
+class MainWindow(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        """Setup before rendering"""
+        self.counter = 0
+        self.setGeometry(100, 100, 400, 300)
+        self.setWindowTitle("Lifecycle Example")
+    
+    def render_(self):
+        """Build the UI"""
+        central = QWidget()
+        layout = QVBoxLayout()
+        
+        self.label = QLabel(f"Count: {self.counter}")
+        self.button = QPushButton("Increment")
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.button)
+        
+        central.setLayout(layout)
+        self.setCentralWidget(central)
+    
+    def component_did_mount(self):
+        """Setup after rendering"""
+        self.button.clicked.connect(self.increment)
+    
+    def set_CSS(self):
+        """Apply styles"""
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f5f5f5;
+            }
+            QLabel {
+                font-size: 18px;
+                color: #333;
+                padding: 20px;
+            }
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+        """)
+    
+    def responsive_UI(self):
+        """Handle responsive layout"""
+        width = self.width()
+        
+        if width < 400:
+            self.label.setStyleSheet("font-size: 14px;")
+        else:
+            self.label.setStyleSheet("font-size: 18px;")
+    
+    def increment(self):
+        """Button click handler"""
+        self.counter += 1
+        self.label.setText(f"Count: {self.counter}")
+
+class AppContext(ApplicationContext):
+    def run(self):
+        self.window = MainWindow()
+        self.window.show()
+        return self.app.exec()
+
+if __name__ == '__main__':
+    appctxt = AppContext()
+    exit_code = appctxt.run()
+    sys.exit(exit_code)
+```
+
+## Internal Methods
+
+These methods are used internally by PPG and typically don't need to be called directly:
+
+### _trigger_render()
+
+Triggers a re-render of the component (used with Pydux state management).
+
+### _clear_widgets()
+
+Clears all child widgets except the main widget.
+
+### _ensure_children_visibility()
+
+Ensures all child widgets are visible after rendering.
+
+### _reconcile_widgets_state()
+
+Reconciles widget state after store updates (used with reactive components).
+
+## See Also
+
+- [Decorators](/api/decorators) - `@init_lifecycle` decorator reference
+- [ApplicationContext](/api/application-context) - Application context reference
+- [Reactive Components](/api/reactive-widgets/overview) - State-driven UI updates

@@ -1,0 +1,235 @@
+---
+title: "subscribe_to_store"
+description: "Subscribe components to receive store change notifications"
+---
+
+## Method Signature
+
+```python
+def subscribe_to_store(self, observer: Any) -> None
+```
+
+## Description
+
+Subscribes an observer object to the Pydux store to receive notifications whenever the store state changes. The observer must implement an `on_store_change(state)` method that will be called after each store update.
+
+## Parameters
+
+<ParamField path="observer" type="Any" required>
+  Any object that has an `on_store_change(state)` method. Typically a component class that inherits from both `PPGLifeCycle` and `Pydux`.
+</ParamField>
+
+## Requirements
+
+The observer object must have:
+
+- An `on_store_change(state)` method that accepts a single parameter:
+  - When schema is set: receives the Pydantic model instance
+  - When no schema: receives a dictionary
+
+If the observer doesn't have this method, a `ValueError` is raised.
+
+## Examples
+
+### Basic Subscription
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
+from PySide6.QtWidgets import QMainWindow, QLabel
+
+@init_lifecycle
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Subscribe to store changes
+        self.subscribe_to_store(self)
+        
+        self.set_schema({
+            "message": str,
+            "count": int
+        })
+    
+    def render_(self):
+        self.label = QLabel('', self)
+    
+    def on_store_change(self, state):
+        # Called whenever the store updates
+        message = self.store.get("message", "")
+        count = self.store.get("count", 0)
+        self.label.setText(f"{message} (Count: {count})")
+```
+
+### Multiple Observers
+
+Multiple components can subscribe to the same store:
+
+```python
+class HeaderComponent(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    
+    def on_store_change(self, state):
+        username = self.store.get("username", "Guest")
+        self.update_header(username)
+
+class SidebarComponent(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    
+    def on_store_change(self, state):
+        notifications = self.store.get("notifications", [])
+        self.update_badge(len(notifications))
+
+# Both components will receive updates independently
+```
+
+### Custom Observer
+
+You can subscribe any object with an `on_store_change` method:
+
+```python
+class DataLogger:
+    def on_store_change(self, state):
+        timestamp = datetime.now()
+        print(f"[{timestamp}] Store updated: {state}")
+
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+        
+        # Subscribe a custom logger
+        self.logger = DataLogger()
+        self.subscribe_to_store(self.logger)
+```
+
+## The on_store_change Callback
+
+### Method Signature
+
+```python
+def on_store_change(self, state) -> None
+```
+
+### Parameters
+
+<ParamField path="state" type="BaseModel | Dict[str, Any]">
+  The current state of the store:
+  - **With schema**: A Pydantic model instance (access via `self.store`)
+  - **Without schema**: A dictionary containing the store data
+</ParamField>
+
+### Accessing State Values
+
+```python
+def on_store_change(self, state):
+    # Recommended: Use the store property
+    username = self.store.get("username", "")
+    count = self.store.get("count", 0)
+    
+    # With schema: state is the Pydantic model
+    # You can also access via state parameter (though store property is preferred)
+    # username = state.username
+    
+    # Update UI based on new state
+    self.label.setText(f"Hello, {username}! Count: {count}")
+```
+
+## When Callbacks Are Triggered
+
+The `on_store_change()` callback is called:
+
+1. After `update_store()` is called
+2. After `update_nested_model()` is called
+3. After `remove_from_store()` is called
+4. After `clear_store()` is called
+
+Callbacks are **not** called:
+- During initial schema setup
+- When reading from the store
+
+## Unsubscribing
+
+### Method Signature
+
+```python
+def unsubscribe_from_store(self, observer: Any) -> None
+```
+
+Remove an observer from receiving store updates:
+
+```python
+class MyComponent(QWidget, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.subscribe_to_store(self)
+    
+    def component_will_unmount(self):
+        # Clean up when component is destroyed
+        self.unsubscribe_from_store(self)
+```
+
+If the observer is not found in the subscribers list, a `ValueError` is raised.
+
+## Observer Pattern Benefits
+
+### Decoupled Components
+
+Components don't need to know about each other:
+
+```python
+# Component A updates the store
+class FormComponent(QWidget, PPGLifeCycle, Pydux):
+    def on_submit(self):
+        self.update_store({"user_data": self.collect_form_data()})
+
+# Component B reacts automatically
+class DisplayComponent(QWidget, PPGLifeCycle, Pydux):
+    def on_store_change(self, state):
+        # Automatically receives updates from Component A
+        self.display(self.store.get("user_data"))
+```
+
+### Automatic UI Synchronization
+
+All subscribed components stay in sync:
+
+```python
+# Update in one place
+self.update_store({"theme": "dark"})
+
+# All subscribed components update automatically:
+# - Header changes color scheme
+# - Sidebar updates styling
+# - Content area re-renders
+# - Settings panel updates toggle
+```
+
+## Integration with PPGLifeCycle
+
+For components using `PPGLifeCycle`, additional benefits:
+
+```python
+class MyApp(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Subscribe during mount
+        self.subscribe_to_store(self)
+    
+    def on_store_change(self, state):
+        # This triggers _reconcile_widgets_state automatically
+        # if the component has that method
+        pass
+```
+
+When an observer has a `_reconcile_widgets_state()` method, it's automatically scheduled via `QTimer.singleShot(0, ...)` for efficient UI updates.
+
+## Best Practices
+
+1. **Subscribe Early**: Subscribe in `component_will_mount()` lifecycle hook
+2. **Unsubscribe on Cleanup**: Unsubscribe in `component_will_unmount()` if needed
+3. **Keep Callbacks Light**: Perform minimal work in `on_store_change()`
+4. **Avoid Recursive Updates**: Don't call `update_store()` directly in `on_store_change()`
+5. **Use Store Property**: Access state via `self.store` for consistency
+
+## Related Methods
+
+- [update_store](/api/pydux/update-store) - Trigger store updates
+- [set_schema](/api/pydux/set-schema) - Define store structure
+- [unsubscribe_from_store](#unsubscribing) - Remove observers

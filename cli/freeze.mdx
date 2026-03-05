@@ -1,0 +1,399 @@
+---
+title: ppg freeze
+description: Compile your application to a standalone executable
+---
+
+## Overview
+
+The `ppg freeze` command compiles your Python application into a standalone executable that can run on any machine without requiring Python or dependencies to be installed.
+
+```bash
+ppg freeze
+```
+
+<Info>
+PPG uses **PyInstaller 6.9.0+** under the hood to bundle your application, Python interpreter, and all dependencies into a single executable.
+</Info>
+
+## Basic Usage
+
+### Standard Build
+
+```bash
+$ ppg freeze
+
+⏳ Freezing your app...
+
+This may take a while, please be patient.
+
+# PyInstaller output...
+
+🎉 Your app was frozen successfully! 🎉
+
+You can find the executable at: target/MyApp/MyApp.exe.
+```
+
+### Debug Build
+
+Include debug information and console output:
+
+```bash
+ppg freeze --debug
+```
+
+<Check>
+**Debug mode** is useful for troubleshooting runtime issues in the frozen app. It:
+- Shows a console window (Windows)
+- Includes debug symbols
+- Provides verbose PyInstaller output
+</Check>
+
+## Platform-Specific Behavior
+
+### Windows
+
+**Executable**: `target/MyApp/MyApp.exe`
+
+```bash
+ppg freeze
+# Creates: target/MyApp/MyApp.exe
+```
+
+**Features**:
+- Icon from `src/main/icons/Icon.ico`
+- Version information from settings
+- Console hidden by default (use `--debug` to show)
+- Automatically handles DLL dependencies
+
+### macOS
+
+**App Bundle**: `target/MyApp.app`
+
+```bash
+ppg freeze
+# Creates: target/MyApp.app/Contents/MacOS/MyApp
+```
+
+**Features**:
+- Complete `.app` bundle structure
+- Info.plist configured from settings
+- Icons and resources bundled
+- Codesigning-ready structure
+
+### Linux
+
+**Binary**: `target/MyApp/MyApp`
+
+```bash
+ppg freeze
+# Creates: target/MyApp/MyApp
+```
+
+**Distribution-specific builds**:
+- Ubuntu: Uses `freeze_ubuntu()`
+- Arch Linux: Uses `freeze_arch()`
+- Fedora: Uses `freeze_fedora()`
+- Other: Generic Linux build
+
+## Requirements
+
+### PyInstaller
+
+PPG requires PyInstaller 6.9.0 or later:
+
+```bash
+pip install PyInstaller>=6.9.0
+```
+
+If PyInstaller is not installed:
+
+```bash
+$ ppg freeze
+Error: Could not find PyInstaller. Maybe you need to:
+    pip install PyInstaller>=6.9.0
+```
+
+### Valid Version Number
+
+Your app version must follow semantic versioning (X.Y.Z):
+
+```json
+{
+  "version": "1.2.3"  // Valid
+}
+```
+
+Invalid versions will cause an error:
+
+```bash
+Error: Invalid version detected in settings. It should be three
+numbers separated by dots, such as "1.2.3". You have: "1.2".
+Usually, this can be fixed in src/build/settings/base.json.
+```
+
+## Output Structure
+
+After freezing, the `target/` directory contains:
+
+```
+target/
+├── MyApp/                    # Application directory
+│   ├── MyApp.exe            # Main executable (Windows)
+│   ├── MyApp                # Main executable (Linux)
+│   ├── Icon.ico             # Application icon
+│   ├── _internal/           # Bundled dependencies
+│   │   ├── python311.dll
+│   │   ├── PySide6/
+│   │   └── ...              # All Python packages
+│   └── resources/           # Your app resources
+│       └── images/
+└── MyApp.app/               # macOS app bundle
+    └── Contents/
+        ├── MacOS/
+        │   └── MyApp        # Executable
+        ├── Resources/
+        │   └── Icon.icns
+        └── Info.plist
+```
+
+## Build Settings
+
+### Configuration File
+
+Freezing behavior is controlled by `src/build/settings/base.json`:
+
+```json
+{
+  "app_name": "MyApp",
+  "version": "1.0.0",
+  "main_module": "src/main/python/main.py",
+  "hidden_imports": [
+    "__future__",
+    "pkg_resources.py2_warn"
+  ],
+  "show_console_window": false
+}
+```
+
+### Hidden Imports
+
+Some packages require explicit imports to be included:
+
+```json
+{
+  "hidden_imports": [
+    "sklearn.neighbors.typedefs",
+    "sklearn.utils._cython_blas",
+    "pkg_resources.py2_warn"
+  ]
+}
+```
+
+### Console Window (Windows)
+
+Control console visibility on Windows:
+
+```json
+{
+  "show_console_window": true  // Always show console
+}
+```
+
+Or use debug mode temporarily:
+
+```bash
+ppg freeze --debug  // Shows console for this build only
+```
+
+## Platform-Specific Configuration
+
+### Windows Settings
+
+**File**: `src/build/settings/windows.json`
+
+```json
+{
+  "show_console_window": false,
+  "hidden_imports": []
+}
+```
+
+### macOS Settings
+
+**File**: `src/build/settings/mac.json`
+
+```json
+{
+  "mac_bundle_identifier": "com.company.myapp",
+  "info_plist": {
+    "CFBundleShortVersionString": "1.0.0",
+    "NSHumanReadableCopyright": "Copyright © 2024"
+  }
+}
+```
+
+### Linux Settings
+
+**File**: `src/build/settings/linux.json`
+
+```json
+{
+  "categories": "Development;",
+  "description": "My amazing application"
+}
+```
+
+## PyInstaller Integration
+
+PPG automatically configures PyInstaller with:
+
+### Windows Build
+
+```bash
+pyinstaller \
+  --name=MyApp \
+  --windowed \
+  --icon=src/main/icons/Icon.ico \
+  --version-file=target/PyInstaller/version_info.py \
+  src/main/python/main.py
+```
+
+### macOS Build
+
+```bash
+pyinstaller \
+  --name=MyApp \
+  --windowed \
+  --icon=src/main/icons/Icon.icns \
+  --osx-bundle-identifier=com.company.myapp \
+  src/main/python/main.py
+```
+
+### Linux Build
+
+```bash
+pyinstaller \
+  --name=MyApp \
+  --windowed \
+  src/main/python/main.py
+```
+
+## Common Issues
+
+### Missing Modules
+
+**Problem**: Runtime error about missing module
+
+```
+ModuleNotFoundError: No module named 'sklearn.neighbors.typedefs'
+```
+
+**Solution**: Add to `hidden_imports`:
+
+```json
+{
+  "hidden_imports": [
+    "sklearn.neighbors.typedefs"
+  ]
+}
+```
+
+### Large Executable Size
+
+PyInstaller bundles everything, which can result in large executables.
+
+**Optimize size**:
+1. Remove unused dependencies
+2. Use `--exclude-module` for unnecessary packages
+3. Consider UPX compression (advanced)
+
+### DLL Issues (Windows)
+
+PPG automatically handles common DLLs, but if you encounter missing DLL errors:
+
+1. Install Visual C++ Redistributable
+2. Add DLL to `src/freeze/windows/` directory
+
+### App Won't Start
+
+**Debug steps**:
+
+1. **Run with --debug**:
+   ```bash
+   ppg freeze --debug
+   ```
+
+2. **Check console output**:
+   ```bash
+   ./target/MyApp/MyApp.exe  # Run from terminal
+   ```
+
+3. **Verify dependencies**:
+   Ensure all resources and data files are included.
+
+## Advanced Usage
+
+### Custom PyInstaller Hooks
+
+Create custom hooks in `src/freeze/hooks/`:
+
+```python
+# src/freeze/hooks/hook-mypackage.py
+from PyInstaller.utils.hooks import collect_data_files
+
+datas = collect_data_files('mypackage')
+```
+
+### Including Data Files
+
+Specify additional data files in settings:
+
+```json
+{
+  "include_data_files": [
+    ["src/main/resources", "resources"],
+    ["config.json", "config.json"]
+  ]
+}
+```
+
+## Implementation Details
+
+The `freeze` command (from `builtin_commands/__init__.py:225-274`):
+
+1. **Validates** project structure and version
+2. **Detects** platform (Windows/macOS/Linux)
+3. **Imports** platform-specific freeze module
+4. **Runs** PyInstaller with appropriate arguments
+5. **Generates** resources and assets
+6. **Outputs** executable location
+
+## Testing the Frozen App
+
+After freezing, always test on a clean machine:
+
+```bash
+# Copy the target/MyApp folder to another computer
+# Run the executable without Python installed
+```
+
+<Warning>
+**Test on Target Platform**: Always test on the actual platform where users will run the app. Cross-compilation is not supported.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Installer" icon="box" href="/cli/installer">
+    Package your frozen app into an installer
+  </Card>
+  <Card title="Distribution" icon="rocket" href="/guides/packaging-distribution">
+    Learn about distributing your application
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg installer](/cli/installer) - Create installers
+- [ppg clean](/cli/clean) - Clean build artifacts
+- [Distribution Guide](/guides/packaging-distribution) - Publishing your app

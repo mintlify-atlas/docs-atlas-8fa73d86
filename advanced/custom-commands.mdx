@@ -1,0 +1,300 @@
+---
+title: Custom Commands
+description: Create your own PPG commands using the @command decorator
+---
+
+PPG allows you to extend its functionality by creating custom commands that integrate seamlessly with the `ppg` command-line interface.
+
+## The @command Decorator
+
+The `@command` decorator is the foundation for creating custom PPG commands. It registers your function so it can be invoked via `ppg <command_name>` on the command line.
+
+### Basic Usage
+
+Create a custom command by decorating a function in your build script:
+
+```python
+from ppg.cmdline import command
+
+@command
+def hello():
+    """Print a friendly greeting"""
+    print("Hello from PPG!")
+```
+
+Source: `ppg/cmdline.py:41-47`
+
+The decorator works by registering your function in the `COMMANDS` dictionary:
+
+```python
+def command(f):
+    """
+    Use this as a decorator to define custom ppg commands.
+    """
+    COMMANDS[f.__name__] = f
+    return f
+```
+
+### Command with Arguments
+
+Your commands can accept arguments, which are automatically parsed from the command line:
+
+```python
+from ppg.cmdline import command
+
+@command
+def deploy(environment):
+    """Deploy app to specified environment"""
+    print(f"Deploying to {environment}...")
+    # Your deployment logic here
+```
+
+Invoke it with:
+
+```bash
+ppg deploy production
+```
+
+### Arguments with Defaults
+
+Provide default values for optional arguments:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS, path
+
+@command
+def build(configuration="debug", verbose=False):
+    """Build the application with optional configuration"""
+    if verbose:
+        print(f"Building in {configuration} mode...")
+    
+    if configuration == "release":
+        # Release build logic
+        pass
+    else:
+        # Debug build logic
+        pass
+```
+
+Invoke with:
+
+```bash
+ppg build release --verbose
+```
+
+<Note>
+Boolean arguments are automatically converted to flags. A parameter with default `False` becomes `--argument`, while `True` becomes `--no-argument`.
+</Note>
+
+## Accessing Build Settings
+
+Custom commands have full access to PPG's build settings through the `SETTINGS` dictionary:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS, path
+
+@command
+def package_info():
+    """Display application package information"""
+    print(f"App Name: {SETTINGS['app_name']}")
+    print(f"Version: {SETTINGS['version']}")
+    print(f"Author: {SETTINGS.get('author', 'Unknown')}")
+    print(f"Project Dir: {SETTINGS['project_dir']}")
+```
+
+## Using PPG Functions
+
+Custom commands can use any PPG function, including the `path()` helper:
+
+```python
+from ppg.cmdline import command
+from ppg import path, SETTINGS
+import shutil
+import os
+
+@command
+def backup():
+    """Create a backup of the build directory"""
+    freeze_dir = path('${freeze_dir}')
+    backup_dir = path('target/backup')
+    
+    if os.path.exists(freeze_dir):
+        shutil.copytree(freeze_dir, backup_dir)
+        print(f"Backup created at {backup_dir}")
+    else:
+        print("No frozen app found. Run 'ppg freeze' first.")
+```
+
+## Integrating with Built-in Commands
+
+You can call built-in PPG commands from your custom commands:
+
+```python
+from ppg.cmdline import command
+from ppg import activate_profile
+from ppg.builtin_commands import freeze, installer
+
+@command
+def build_release():
+    """Build a complete release package"""
+    print("Building release...")
+    
+    # Activate release profile
+    activate_profile('release')
+    
+    # Run freeze
+    freeze(debug=False)
+    
+    # Create installer
+    installer()
+    
+    print("Release build complete!")
+```
+
+## Creating a Custom Build Script
+
+For complex workflows, create a dedicated build script that imports PPG:
+
+```python build.py
+from ppg.cmdline import command, main
+from ppg import SETTINGS, path, activate_profile
+from ppg.builtin_commands import clean, freeze, installer
+import sys
+
+@command
+def full_build(skip_tests=False):
+    """Complete build pipeline with testing"""
+    clean()
+    
+    if not skip_tests:
+        from ppg.builtin_commands import test
+        test()
+    
+    activate_profile('release')
+    freeze()
+    installer()
+
+@command
+def dev_build():
+    """Quick development build"""
+    freeze(debug=True)
+
+if __name__ == '__main__':
+    main()
+```
+
+Run it with:
+
+```bash
+python build.py full_build
+python build.py dev_build
+```
+
+## Command Discovery
+
+PPG automatically discovers commands when you import modules. The built-in commands are loaded via:
+
+```python
+from ppg import builtin_commands
+```
+
+Source: `ppg/cmdline.py:26`
+
+## Argument Parsing Details
+
+PPG uses Python's `argparse` module internally to parse command-line arguments. The system inspects your function signature using `getfullargspec` to determine:
+
+- Required positional arguments
+- Optional arguments with defaults
+- Boolean flags
+
+Source: `ppg/cmdline.py:72-87`
+
+<Tip>
+The docstring of your command function becomes its help text when users run `ppg --help`.
+</Tip>
+
+## Error Handling
+
+Raise `FbsError` for user-facing errors (no stack trace):
+
+```python
+from ppg.cmdline import command
+from ppg_runtime import FbsError
+import os
+
+@command
+def validate_config():
+    """Validate configuration files"""
+    config_file = 'src/build/settings/base.json'
+    
+    if not os.path.exists(config_file):
+        raise FbsError(
+            f"Configuration file not found: {config_file}\n"
+            "Please create it before running this command."
+        )
+    
+    print("Configuration is valid!")
+```
+
+## Real-World Example
+
+Here's a complete example that creates platform-specific builds:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS, activate_profile
+from ppg.builtin_commands import freeze, installer, sign
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+from ppg_runtime import FbsError
+
+@command
+def platform_build(sign_build=False):
+    """Create platform-specific installer with optional signing"""
+    app_name = SETTINGS['app_name']
+    
+    # Determine platform
+    if is_windows():
+        platform = "Windows"
+    elif is_mac():
+        platform = "macOS"
+    elif is_linux():
+        platform = "Linux"
+    else:
+        raise FbsError("Unsupported platform")
+    
+    print(f"Building {app_name} for {platform}...")
+    
+    # Activate release profile
+    activate_profile('release')
+    
+    # Freeze the application
+    freeze()
+    
+    # Sign if requested and supported
+    if sign_build:
+        if is_windows():
+            sign()
+        elif is_mac():
+            print("macOS signing not yet implemented")
+        else:
+            print("Signing not supported on this platform")
+    
+    # Create installer
+    installer()
+    
+    print(f"Build complete for {platform}!")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Settings" icon="gear" href="/advanced/build-settings">
+    Learn how to configure build settings and profiles
+  </Card>
+  <Card title="Platform-Specific" icon="desktop" href="/advanced/platform-specific">
+    Handle platform differences in your builds
+  </Card>
+</CardGroup>

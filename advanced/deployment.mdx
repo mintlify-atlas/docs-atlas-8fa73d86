@@ -1,0 +1,646 @@
+---
+title: Deployment & Distribution
+description: Production builds, code signing, notarization, auto-updates, and CI/CD integration
+---
+
+Deploying your PPG application involves several steps to ensure your users can install and trust your application. This guide covers production builds, code signing, and distribution strategies.
+
+## Production Builds
+
+Production builds require careful configuration to ensure optimal performance and user experience.
+
+### Release Profile
+
+Create a release profile in `src/build/settings/release.json`:
+
+```json release.json
+{
+    "show_console_window": false,
+    "server_url": "https://api.production.com",
+    "api_key": "${prod_api_key}",
+    "debug_mode": false,
+    "analytics_enabled": true,
+    "update_server": "https://updates.myapp.com"
+}
+```
+
+Activate it in your build:
+
+```python
+from ppg import activate_profile
+from ppg.builtin_commands import freeze, installer
+
+activate_profile('release')
+freeze()
+installer()
+```
+
+### The Built-in Release Command
+
+PPG provides a comprehensive `release` command that handles the entire release workflow:
+
+```bash
+ppg release 1.2.0
+```
+
+Source: `ppg/builtin_commands/__init__.py:545-588`
+
+This command:
+1. Activates the release profile
+2. Cleans previous builds
+3. Freezes the application
+4. Signs the application (Windows)
+5. Creates an installer
+6. Signs the installer (Windows/Linux)
+7. Generates repository files (Linux)
+8. Uploads to distribution server
+9. Updates `base.json` with new version
+
+```python
+@command
+def release(version=None):
+    """
+    Bump version and run clean,freeze,...,upload
+    """
+    require_existing_project()
+    if version is None:
+        curr_version = SETTINGS['version']
+        next_version = _get_next_version(curr_version)
+        release_version = prompt_for_value(
+            'Release version', default=next_version
+        )
+    elif version == 'current':
+        release_version = SETTINGS['version']
+    else:
+        release_version = version
+    
+    activate_profile('release')
+    SETTINGS['version'] = release_version
+    
+    try:
+        clean()
+        freeze()
+        if is_windows() and _has_windows_codesigning_certificate():
+            sign()
+        installer()
+        if (is_windows() and _has_windows_codesigning_certificate()) or \
+           is_arch_linux() or is_fedora():
+            sign_installer()
+        if _repo_is_supported():
+            repo()
+    finally:
+        _LOG.setLevel(log_level)
+    
+    upload()
+    update_json(path('src/build/settings/base.json'), {'version': release_version})
+```
+
+## Code Signing
+
+Code signing proves to users that your application comes from a trusted source and hasn't been tampered with.
+
+### Windows Code Signing
+
+Windows code signing requires a code signing certificate (`.pfx` file).
+
+#### Setup
+
+1. **Obtain a code signing certificate** from a Certificate Authority (DigiCert, Sectigo, etc.)
+2. **Place the certificate** at `src/sign/windows/certificate.pfx`
+3. **Configure password** in `src/build/settings/secret.json`:
+
+```json secret.json
+{
+    "windows_sign_pass": "your-certificate-password",
+    "windows_sign_server": "http://timestamp.digicert.com"
+}
+```
+
+#### Sign Your Application
+
+```bash
+ppg sign
+```
+
+Source: `ppg/builtin_commands/__init__.py:277-292`
+
+This signs all `.exe` and `.dll` files in your frozen application:
+
+```python
+@command
+def sign():
+    """
+    Sign your app, so the user's OS trusts it
+    """
+    require_frozen_app()
+    if is_windows():
+        from ppg.sign.windows import sign_windows
+        sign_windows()
+        _LOG.info(
+            'Signed all binary files in %s and its subdirectories.',
+            relpath(path('${freeze_dir}'), path('.'))
+        )
+    elif is_mac():
+        _LOG.info('ppg does not yet implement `sign` on macOS.')
+    else:
+        _LOG.info('This platform does not support signing frozen apps.')
+```
+
+<Accordion title="Windows Signing Implementation">
+The Windows signing implementation uses `signtool.exe` to sign files with both SHA-1 and SHA-256 algorithms:
+
+Source: `ppg/sign/windows.py:15-36`
+
+```python
+def sign_windows():
+    if not exists(path(_CERTIFICATE_PATH)):
+        raise FbsError(
+            'Could not find a code signing certificate at:\n    '
+            + _CERTIFICATE_PATH
+        )
+    if 'windows_sign_pass' not in SETTINGS:
+        raise FbsError(
+            "Please set 'windows_sign_pass' to the password of %s in either "
+            "src/build/settings/secret.json or ..."
+            % _CERTIFICATE_PATH
+        )
+    
+    helper = _WindowsCodeSigningHelper.instance()
+    for subdir, _, files in walk(path('${freeze_dir}')):
+        for file_ in files:
+            if file_.endswith(('.exe', '.dll')):
+                sign_file(join(subdir, file_))
+```
+</Accordion>
+
+#### Sign the Installer
+
+```bash
+ppg sign_installer
+```
+
+Source: `ppg/sign_installer/windows.py`
+
+```python
+def sign_installer_windows():
+    installer = path('target/${installer}')
+    sign_file(installer, SETTINGS['app_name'] + ' Setup', SETTINGS['url'])
+```
+
+### macOS Code Signing
+
+<Warning>
+macOS code signing is not yet implemented in PPG. You'll need to sign manually using `codesign`.
+</Warning>
+
+Manual signing process:
+
+```bash
+# Sign the .app bundle
+codesign --deep --force --verify --verbose \
+  --sign "Developer ID Application: Your Name (TEAM_ID)" \
+  --options runtime \
+  target/MyApp.app
+
+# Verify the signature
+codesign --verify --verbose=4 target/MyApp.app
+```
+
+### Linux Code Signing
+
+Linux uses GPG signing for packages.
+
+#### Generate GPG Key
+
+```bash
+ppg gengpgkey
+```
+
+This creates:
+- `src/sign/linux/private-key.gpg` - Private key (keep secret!)
+- `src/sign/linux/public-key.gpg` - Public key (distribute to users)
+
+Configuration is stored in `base.json` and `secret.json`:
+
+```json base.json
+{
+    "gpg_key": "YOUR_KEY_ID",
+    "gpg_name": "Your Name"
+}
+```
+
+```json secret.json
+{
+    "gpg_pass": "your-gpg-passphrase"
+}
+```
+
+#### Sign Installers
+
+For Arch Linux and Fedora:
+
+```bash
+ppg sign_installer
+```
+
+Source: `ppg/builtin_commands/__init__.py:351-371`
+
+<CodeGroup>
+
+```python Arch Linux
+from ppg.sign_installer.arch import sign_installer_arch
+
+def sign_installer_arch():
+    installer = path('target/${installer}')
+    # Prevent GPG from prompting for passphrase
+    os.environ['GPGPASS'] = SETTINGS['gpg_pass']
+    run(['gpg', '--batch', '--yes', '--detach-sign', installer])
+```
+
+```python Fedora
+from ppg.sign_installer.fedora import sign_installer_fedora
+
+def sign_installer_fedora():
+    os.environ['GPGPASS'] = SETTINGS['gpg_pass']
+    run(['rpm', '--addsign', path('target/${installer}')], stdout=DEVNULL)
+```
+
+</CodeGroup>
+
+## Notarization (macOS)
+
+macOS Catalina+ requires notarization for apps distributed outside the Mac App Store.
+
+<Note>
+Notarization is currently a manual process with PPG. Future versions may automate this.
+</Note>
+
+### Manual Notarization Steps
+
+1. **Sign your app** with a Developer ID certificate:
+
+```bash
+codesign --deep --force --verify --verbose \
+  --sign "Developer ID Application: Your Name (TEAM_ID)" \
+  --options runtime \
+  target/MyApp.app
+```
+
+2. **Create a DMG**:
+
+```bash
+ppg installer
+```
+
+3. **Upload for notarization**:
+
+```bash
+xcrun notarytool submit target/MyApp.dmg \
+  --apple-id "your@email.com" \
+  --team-id "TEAM_ID" \
+  --password "app-specific-password" \
+  --wait
+```
+
+4. **Staple the notarization ticket**:
+
+```bash
+xcrun stapler staple target/MyApp.dmg
+```
+
+5. **Verify**:
+
+```bash
+spctl -a -vv target/MyApp.dmg
+```
+
+## Automatic Updates
+
+PPG supports automatic updates through repository-based distribution on Linux.
+
+### Linux Auto-Updates
+
+Generate update repository:
+
+```bash
+ppg repo
+```
+
+Source: `ppg/builtin_commands/__init__.py:374-453`
+
+This creates platform-specific repositories:
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    Creates an APT repository in `target/repo/`:
+    
+    ```bash
+    # Users add your repository
+    echo "deb [arch=amd64] https://repo.yoursite.com stable main" \
+      | sudo tee /etc/apt/sources.list.d/myapp.list
+    
+    # Import signing key
+    sudo apt-key add public-key.gpg
+    
+    # Install and get automatic updates
+    sudo apt-get update
+    sudo apt-get install myapp
+    ```
+  </Tab>
+  
+  <Tab title="Arch Linux">
+    Creates a Pacman repository:
+    
+    ```bash
+    # Add repository to /etc/pacman.conf
+    echo -e '\n[MyApp]\nServer = https://repo.yoursite.com' \
+      | sudo tee -a /etc/pacman.conf
+    
+    # Import signing key
+    sudo pacman-key --add public-key.gpg
+    sudo pacman-key --lsign-key YOUR_KEY_ID
+    
+    # Install and get automatic updates
+    sudo pacman -Syu myapp
+    ```
+  </Tab>
+  
+  <Tab title="Fedora/CentOS">
+    Creates a DNF/YUM repository:
+    
+    ```bash
+    # Import signing key
+    sudo rpm -v --import public-key.gpg
+    
+    # Add repository
+    sudo dnf config-manager --add-repo https://repo.yoursite.com/MyApp.repo
+    
+    # Install and get automatic updates
+    sudo dnf install myapp
+    ```
+  </Tab>
+</Tabs>
+
+### Upload Repository
+
+Upload to your distribution server:
+
+```bash
+ppg upload
+```
+
+This uploads:
+- Installer file
+- Repository metadata
+- GPG public key
+
+Source: `ppg/builtin_commands/__init__.py:459-542`
+
+## CI/CD Integration
+
+Automate your build and release process using CI/CD pipelines.
+
+### GitHub Actions Example
+
+```yaml .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install ppg PyInstaller PySide6
+      
+      - name: Build
+        run: |
+          ppg freeze
+          ppg installer
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-installer
+          path: target/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install ppg PyInstaller PySide6
+      
+      - name: Build
+        run: |
+          ppg freeze
+          ppg installer
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-dmg
+          path: target/*.dmg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install ppg PyInstaller PySide6
+      
+      - name: Build
+        run: |
+          ppg freeze
+          ppg installer
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-deb
+          path: target/*.deb
+```
+
+### Azure Pipelines Example
+
+```yaml azure-pipelines.yml
+trigger:
+  tags:
+    include:
+      - v*
+
+strategy:
+  matrix:
+    windows:
+      imageName: 'windows-latest'
+      artifactName: 'windows-installer'
+    mac:
+      imageName: 'macos-latest'
+      artifactName: 'macos-dmg'
+    linux:
+      imageName: 'ubuntu-latest'
+      artifactName: 'linux-deb'
+
+pool:
+  vmImage: $(imageName)
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.11'
+
+- script: |
+    pip install ppg PyInstaller PySide6
+  displayName: 'Install dependencies'
+
+- script: |
+    ppg freeze
+    ppg installer
+  displayName: 'Build application'
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: 'target'
+    artifactName: $(artifactName)
+```
+
+## Distribution Best Practices
+
+### 1. Version Management
+
+Use semantic versioning (MAJOR.MINOR.PATCH):
+
+```json base.json
+{
+    "version": "1.2.3"
+}
+```
+
+The release command automatically increments versions:
+
+```python
+def _get_next_version(version):
+    version_parts = version.split('.')
+    next_patch = str(int(version_parts[-1]) + 1)
+    return '.'.join(version_parts[:-1]) + '.' + next_patch
+```
+
+Source: `ppg/builtin_commands/__init__.py:649-652`
+
+### 2. Release Checklist
+
+<Steps>
+  <Step title="Update Version">
+    Update version number in `base.json` or use `ppg release <version>`
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Run automated tests: `ppg test`
+  </Step>
+  
+  <Step title="Build Release">
+    Create production build with release profile
+  </Step>
+  
+  <Step title="Sign Binaries">
+    Sign application and installer (platform-dependent)
+  </Step>
+  
+  <Step title="Test Installer">
+    Install on clean system to verify functionality
+  </Step>
+  
+  <Step title="Upload">
+    Upload to distribution server or release platform
+  </Step>
+  
+  <Step title="Tag Release">
+    Create git tag: `git tag v1.2.3`
+  </Step>
+  
+  <Step title="Announce">
+    Notify users of new release
+  </Step>
+</Steps>
+
+### 3. Multi-Platform Distribution
+
+<Tip>
+Build on the target platform whenever possible. Cross-compilation is not reliably supported.
+</Tip>
+
+Use a matrix build strategy:
+
+```python build_all.py
+from ppg.cmdline import command
+from ppg import activate_profile
+from ppg.builtin_commands import clean, freeze, installer, sign, sign_installer
+from ppg_runtime.platform import is_windows, is_mac, is_arch_linux, is_fedora
+
+@command
+def release_all():
+    """Build release for current platform"""
+    activate_profile('release')
+    clean()
+    freeze()
+    
+    # Platform-specific signing
+    if is_windows() and _has_certificate():
+        sign()
+    
+    installer()
+    
+    if is_windows() or is_arch_linux() or is_fedora():
+        sign_installer()
+    
+    print("Release build complete for current platform!")
+
+def _has_certificate():
+    from ppg import path
+    import os
+    return os.path.exists(path('src/sign/windows/certificate.pfx'))
+```
+
+### 4. Hosting Options
+
+- **GitHub Releases** - Free hosting for open-source projects
+- **Self-hosted** - Full control, use `ppg upload` with custom server
+- **Cloud storage** - S3, Azure Blob Storage, Google Cloud Storage
+- **Package managers** - Submit to platform-specific stores
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Commands" icon="code" href="/advanced/custom-commands">
+    Create custom deployment commands
+  </Card>
+  <Card title="Build Settings" icon="gear" href="/advanced/build-settings">
+    Configure release profiles and settings
+  </Card>
+</CardGroup>

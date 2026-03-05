@@ -1,0 +1,377 @@
+---
+title: ReactiveCheckBox
+description: Boolean checkbox widget with bidirectional Pydux store synchronization
+---
+
+## Overview
+
+`ReactiveCheckBox` is a reactive wrapper around Qt's `QCheckBox` that provides two-way data binding with your Pydux store. User interactions automatically update boolean values in the store, and store changes automatically update the checkbox state.
+
+**Source:** `ppg_runtime/ReactiveWidgets/check_box.py:17`
+
+## Inheritance
+
+```python
+ReactiveCheckBox(QCheckBox)
+```
+
+Inherits all methods and properties from Qt's `QCheckBox`.
+
+## Constructor
+
+```python
+ReactiveCheckBox(
+    parent,
+    key: str,
+    text: str = "",
+    onChange: Optional[Callable[[bool], None]] = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()`, `update_store()`, and `get_nested()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind to. Supports nested keys using dot notation (e.g., `"settings.darkMode"`).
+  
+  The value should be a boolean in the store.
+</ParamField>
+
+<ParamField path="text" type="str" default="">
+  Label text displayed next to the checkbox.
+  
+  Example: `"Enable notifications"`
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[bool], None]" default="None">
+  Optional callback function called when the checkbox state changes.
+  
+  Receives the new boolean state (True for checked, False for unchecked).
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QCheckBox` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that synchronizes the checkbox state with the store value. Called automatically when store changes.
+
+**Behavior:**
+- Retrieves boolean value from store using `parent.get_nested(key)`
+- Defaults to `False` if key not found
+- Updates checkbox only if state differs
+- Uses `_updating_from_store` flag to prevent circular updates
+- Supports nested keys
+
+**Source:** `ppg_runtime/ReactiveWidgets/check_box.py:63`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/check_box.py:74`
+
+### _on_state_changed(state)
+
+```python
+def _on_state_changed(self, state: int)
+```
+
+Internal callback connected to Qt's `stateChanged` signal. Updates the store when user clicks the checkbox.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- Converts Qt state to boolean (Qt.Checked = True, Qt.Unchecked = False)
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+<ParamField path="state" type="int">
+  Qt checkbox state (Qt.Checked or Qt.Unchecked).
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/check_box.py:45`
+
+## Usage Examples
+
+### Basic Checkbox
+
+Simple boolean toggle:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveCheckBox
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"isEnabled": bool})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveCheckBox(
+            self,
+            key="isEnabled",
+            text="Enable feature"
+        ).move(20, 20)
+```
+
+### Settings Panel
+
+Multiple boolean settings:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "notifications": bool,
+            "autoSave": bool,
+            "darkMode": bool,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveCheckBox(self, key="notifications", text="Enable Notifications").move(20, 20)
+        ReactiveCheckBox(self, key="autoSave", text="Auto-save").move(20, 50)
+        ReactiveCheckBox(self, key="darkMode", text="Dark Mode").move(20, 80)
+```
+
+### Nested State
+
+Access nested configuration objects:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "settings": {
+                "showGrid": bool,
+                "snapToGrid": bool,
+                "showRuler": bool,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveCheckBox(self, key="settings.showGrid", text="Show Grid").move(20, 20)
+        ReactiveCheckBox(self, key="settings.snapToGrid", text="Snap to Grid").move(20, 50)
+        ReactiveCheckBox(self, key="settings.showRuler", text="Show Ruler").move(20, 80)
+```
+
+### With Change Callback
+
+React to checkbox state changes:
+
+```python
+def on_dark_mode_change(is_enabled):
+    if is_enabled:
+        print("Dark mode enabled")
+        # Apply dark theme
+    else:
+        print("Dark mode disabled")
+        # Apply light theme
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"darkMode": bool})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveCheckBox(
+            self,
+            key="darkMode",
+            text="Dark Mode",
+            onChange=on_dark_mode_change
+        ).move(20, 20)
+```
+
+### Conditional UI
+
+Show/hide UI elements based on checkbox:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveCheckBox, ReactiveLineEdit
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "useCustomUrl": bool,
+            "customUrl": str,
+        })
+        self.subscribe_to_store(self)
+    
+    def on_custom_url_toggle(self, enabled):
+        # Show/hide custom URL input
+        if hasattr(self, 'url_input'):
+            self.url_input.setVisible(enabled)
+    
+    def render_(self):
+        ReactiveCheckBox(
+            self,
+            key="useCustomUrl",
+            text="Use custom URL",
+            onChange=self.on_custom_url_toggle
+        ).move(20, 20)
+        
+        # Input shown only when checkbox is checked
+        self.url_input = ReactiveLineEdit(
+            self,
+            key="customUrl",
+            placeholder="https://example.com"
+        )
+        self.url_input.setGeometry(40, 50, 300, 30)
+        self.url_input.setVisible(self.store.get("useCustomUrl", False))
+```
+
+### Terms and Conditions
+
+Required agreement checkbox:
+
+```python
+from PySide6.QtWidgets import QPushButton
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"agreedToTerms": bool})
+        self.subscribe_to_store(self)
+    
+    def on_terms_change(self, agreed):
+        # Enable/disable submit button
+        if hasattr(self, 'submit_btn'):
+            self.submit_btn.setEnabled(agreed)
+    
+    def render_(self):
+        ReactiveCheckBox(
+            self,
+            key="agreedToTerms",
+            text="I agree to the terms and conditions",
+            onChange=self.on_terms_change
+        ).move(20, 20)
+        
+        self.submit_btn = QPushButton("Submit", self)
+        self.submit_btn.setEnabled(False)
+        self.submit_btn.move(20, 50)
+```
+
+### Feature Toggles
+
+Experimental features panel:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "experimental": {
+                "feature1": bool,
+                "feature2": bool,
+                "feature3": bool,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def on_feature_toggle(self, feature_name):
+        def callback(enabled):
+            print(f"{feature_name}: {'enabled' if enabled else 'disabled'}")
+        return callback
+    
+    def render_(self):
+        y = 20
+        features = [
+            ("experimental.feature1", "New UI"),
+            ("experimental.feature2", "Beta API"),
+            ("experimental.feature3", "Advanced Mode"),
+        ]
+        
+        for key, text in features:
+            ReactiveCheckBox(
+                self,
+                key=key,
+                text=text,
+                onChange=self.on_feature_toggle(text)
+            ).move(20, y)
+            y += 30
+```
+
+## Common Use Cases
+
+### Settings and Preferences
+
+```python
+ReactiveCheckBox(self, key="enableNotifications", text="Enable Notifications")
+ReactiveCheckBox(self, key="autoSave", text="Auto-save")
+```
+
+### Filters
+
+```python
+ReactiveCheckBox(self, key="showCompleted", text="Show completed items")
+ReactiveCheckBox(self, key="showArchived", text="Show archived")
+```
+
+### User Agreements
+
+```python
+ReactiveCheckBox(self, key="agreedToTerms", text="I agree to the terms")
+ReactiveCheckBox(self, key="newsletterOptIn", text="Subscribe to newsletter")
+```
+
+### Debug/Developer Options
+
+```python
+ReactiveCheckBox(self, key="debug.showLogs", text="Show logs")
+ReactiveCheckBox(self, key="debug.verboseMode", text="Verbose mode")
+```
+
+## Important Notes
+
+- **Boolean values**: Store value should be boolean (True/False)
+- **Default value**: Defaults to `False` if key not found in store
+- **Two-way binding**: Changes flow both ways automatically
+- **Circular update prevention**: Uses `_updating_from_store` flag
+- **Nested key support**: Use dot notation for nested objects
+- **All QCheckBox methods work**: setTristate(), setCheckState(), etc.
+- **State conversion**: Automatically converts Qt state enum to boolean
+
+## Tri-state Checkboxes
+
+For tri-state checkboxes (checked/unchecked/partially checked), use standard QCheckBox:
+
+```python
+checkbox = ReactiveCheckBox(self, key="state", text="Select")
+checkbox.setTristate(True)
+```
+
+Note: Store value will still be boolean. For true tri-state support, store an integer or enum.
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveComboBox" icon="list" href="/api/reactive-widgets/combo-box">
+    For multiple choice selection
+  </Card>
+  <Card title="ReactiveSlider" icon="sliders" href="/api/reactive-widgets/slider">
+    For numeric range selection
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

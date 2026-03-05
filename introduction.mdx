@@ -1,0 +1,181 @@
+---
+title: Introduction
+description: Learn about PPG, a modern framework for building scalable desktop applications with Python and Qt
+---
+
+## What is PPG?
+
+PPG (Python Package Generator) is a modern and powerful framework for building scalable desktop applications with Python and Qt. It brings the best practices from web development—particularly React and Redux—to the world of native desktop applications.
+
+<Note>
+  PPG is built on top of Qt (PyQt5/6 or PySide2/6), combining the power of native widgets with modern development patterns.
+</Note>
+
+## Why Choose PPG?
+
+Traditional Qt development can become complex and hard to maintain as applications grow. PPG solves this by providing:
+
+- **Structured Component Lifecycle**: Clear hooks for every stage of a component's life
+- **Type-Safe State Management**: Predictable state updates with Pydux
+- **Developer Productivity**: Hot reloading for instant feedback
+- **Flexible Architecture**: Support for native widgets, web UIs, or both
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Component Lifecycle" icon="rotate">
+    React-inspired lifecycle hooks guide each element through initialization, rendering, and cleanup.
+  </Card>
+  
+  <Card title="Pydux State Management" icon="database">
+    Type-safe global state powered by Pydantic for real-time communication between components.
+  </Card>
+  
+  <Card title="Hot Reloading" icon="fire">
+    See UI changes instantly without restarting your app—dramatically shortening the feedback loop.
+  </Card>
+  
+  <Card title="Hybrid Applications" icon="window">
+    Seamlessly combine native Qt widgets with modern web UIs (React, Vue, etc.) in the same app.
+  </Card>
+</CardGroup>
+
+## Component-Based Architecture
+
+PPG introduces a component-based architecture to Qt development. Instead of managing a monolithic application, you build composable components with well-defined lifecycles:
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle, init_lifecycle
+from PySide6.QtWidgets import QWidget
+
+@init_lifecycle
+class MyComponent(QWidget, PPGLifeCycle):
+    def component_will_mount(self):
+        # Setup before rendering
+        pass
+    
+    def render_(self):
+        # Build your UI
+        pass
+    
+    def component_did_mount(self):
+        # React to completed render
+        pass
+```
+
+This lifecycle approach provides clear moments to:
+
+- **Mount**: Set up components and fetch initial data
+- **Update**: React to data changes and re-render the UI
+- **Unmount**: Clean up resources to prevent memory leaks
+
+## State Management with Pydux
+
+Pydux is PPG's global state management system, inspired by Redux but built for Python with Pydantic integration:
+
+```python
+from ppg_runtime.application_context import Pydux
+from pydantic import BaseModel
+
+class UserModel(BaseModel):
+    name: str
+    email: str
+
+class MyApp(Pydux):
+    def __init__(self):
+        # Define schema
+        self.set_schema({
+            'user': UserModel,
+            'count': int
+        })
+        
+        # Update state
+        self.update_store({
+            'count': 0,
+            'user': UserModel(name='John', email='john@example.com')
+        })
+```
+
+**Benefits:**
+- **Type Safety**: Pydantic ensures your state is always valid
+- **Unified State**: Single source of truth for your entire application
+- **Reactive Updates**: Components automatically update when relevant state changes
+
+<Warning>
+  **Deprecation Notice:** `PPGStore` has been deprecated in favor of Pydux. Migrate to Pydux to leverage type safety and advanced features.
+</Warning>
+
+## Hybrid Development
+
+PPG supports hybrid applications that combine native Qt widgets with modern web UIs:
+
+- **Native Widgets**: Use Qt widgets for performance-critical parts
+- **Web UIs**: Embed React, Vue, or HTML/CSS/JS interfaces
+- **Bidirectional Communication**: `WebEngineBridge` provides seamless Python ↔ JavaScript messaging
+- **Shared State**: Both native and web components can use the same Pydux state
+
+## Comparison with Traditional Qt
+
+| Feature | Traditional Qt | PPG |
+|---------|---------------|-----|
+| **Architecture** | Event-driven, no structured lifecycle | Component-based with lifecycle hooks |
+| **State Management** | Manual signal/slot wiring | Global state with Pydux |
+| **Development Speed** | Full restarts for changes | Hot reloading |
+| **Scalability** | Can become complex at scale | Modular, maintainable components |
+| **Type Safety** | Limited | Full Pydantic integration |
+
+## Complete CLI Workflow
+
+PPG includes a comprehensive CLI that manages your entire development lifecycle:
+
+```bash
+ppg init        # Initialize a new project
+ppg start       # Run in development mode
+ppg create      # Generate components/views
+ppg freeze      # Compile to executable
+ppg installer   # Create platform installer
+```
+
+## Getting Started
+
+Ready to build your first PPG application? Follow these guides:
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install PPG and set up your development environment
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your first app running in minutes
+  </Card>
+  
+  <Card title="Your First App" icon="code" href="/your-first-app">
+    Build a complete application step-by-step
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/core-concepts">
+    Deep dive into PPG's architecture
+  </Card>
+</CardGroup>
+
+## System Requirements
+
+- **Python**: 3.8, 3.9, 3.10, 3.11, or 3.12
+- **Qt Binding**: PyQt5, PyQt6, PySide2, or PySide6
+- **Platforms**: Windows, macOS, Linux (Ubuntu, Fedora, Arch, etc.)
+
+## Next Steps
+
+<Steps>
+  <Step title="Install PPG">
+    Follow the [installation guide](/installation) to set up PPG on your system.
+  </Step>
+  
+  <Step title="Quick Start">
+    Complete the [quick start tutorial](/quickstart) to create your first project.
+  </Step>
+  
+  <Step title="Build Your First App">
+    Work through the [first app tutorial](/your-first-app) to learn core concepts.
+  </Step>
+</Steps>

@@ -1,0 +1,488 @@
+---
+title: Platform-Specific Builds
+description: Handle platform differences and create optimized builds for Windows, macOS, and Linux
+---
+
+PPG provides comprehensive support for building platform-specific applications, with utilities to detect the current platform and handle platform-specific code paths.
+
+## Platform Detection
+
+PPG provides several functions to detect the current operating system:
+
+```python
+from ppg_runtime.platform import (
+    is_windows, is_mac, is_linux,
+    is_ubuntu, is_arch_linux, is_fedora,
+    name
+)
+
+if is_windows():
+    print("Running on Windows")
+elif is_mac():
+    print("Running on macOS")
+elif is_linux():
+    print("Running on Linux")
+```
+
+Source: `ppg_runtime/platform.py:6-22`
+
+### Platform Detection Functions
+
+<CodeGroup>
+
+```python is_windows()
+def is_windows():
+    """
+    Return True if the current OS is Windows, False otherwise.
+    """
+    return name() == 'Windows'
+```
+
+```python is_mac()
+def is_mac():
+    """
+    Return True if the current OS is macOS, False otherwise.
+    """
+    return name() == 'Mac'
+```
+
+```python is_linux()
+def is_linux():
+    """
+    Return True if the current OS is Linux, False otherwise.
+    """
+    return name() == 'Linux'
+```
+
+```python name()
+def name():
+    """
+    Returns 'Windows', 'Mac' or 'Linux', depending on the current OS.
+    """
+    if sys.platform in ('win32', 'cygwin'):
+        return 'Windows'
+    if sys.platform == 'darwin':
+        return 'Mac'
+    if sys.platform.startswith('linux'):
+        return 'Linux'
+    raise FbsError('Unknown operating system.')
+```
+
+</CodeGroup>
+
+### Linux Distribution Detection
+
+For Linux builds, PPG can detect specific distributions:
+
+```python
+from ppg_runtime.platform import is_ubuntu, is_arch_linux, is_fedora, linux_distribution
+
+if is_linux():
+    distro = linux_distribution()
+    
+    if is_ubuntu():
+        # Ubuntu, Linux Mint, or Pop!_OS
+        print("Building .deb package")
+    elif is_arch_linux():
+        # Arch Linux or Manjaro
+        print("Building .pkg.tar.xz package")
+    elif is_fedora():
+        # Fedora or CentOS
+        print("Building .rpm package")
+```
+
+Source: `ppg_runtime/platform.py:42-58`
+
+<Note>
+Distribution detection reads from `/etc/os-release` on Linux systems.
+</Note>
+
+## Platform-Specific Code Paths
+
+Use platform detection to implement platform-specific behavior:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS, path
+from ppg_runtime.platform import is_windows, is_mac, is_linux
+import os
+
+@command
+def install_dependencies():
+    """Install platform-specific dependencies"""
+    if is_windows():
+        # Windows-specific dependencies
+        os.system('pip install pywin32')
+    elif is_mac():
+        # macOS-specific dependencies
+        os.system('pip install pyobjc-framework-Cocoa')
+    elif is_linux():
+        # Linux-specific dependencies
+        os.system('pip install python-xlib')
+```
+
+## Freeze Differences Per Platform
+
+Each platform has unique freeze implementations to handle platform-specific requirements.
+
+### Windows Freeze
+
+Windows builds include special handling for:
+- Console window visibility
+- Icon embedding
+- Version information
+- DLL dependencies
+
+Source: `ppg/freeze/windows.py:13-27`
+
+```python
+def freeze_windows(debug=False):
+    args = []
+    if not (debug or SETTINGS['show_console_window']):
+        # Hide console window in production
+        args.append('--windowed')
+    args.extend(['--icon', path('src/main/icons/Icon.ico')])
+    
+    # Add version information
+    args.extend(['--version-file', path('target/PyInstaller/version_info.py')])
+    
+    run_pyinstaller(args, debug)
+    _restore_corrupted_python_dlls()
+    _generate_resources()
+    _add_missing_dlls()
+```
+
+<Accordion title="Windows DLL Management">
+  Windows builds automatically include required Visual C++ runtime DLLs:
+  
+  ```python
+  def _add_missing_dlls():
+      for dll_name in (
+          'msvcr100.dll', 'msvcr110.dll', 'msvcp110.dll',
+          'vcruntime140.dll', 'msvcp140.dll', 'concrt140.dll',
+          'vccorlib140.dll'
+      ):
+          try:
+              _add_missing_dll(dll_name)
+          except LookupError:
+              raise FileNotFoundError(
+                  "Could not find %s on your PATH. Please install the "
+                  "Visual C++ Redistributable for Visual Studio 2012"
+                  % dll_name
+              )
+  ```
+  
+  Source: `ppg/freeze/windows.py:45-58`
+</Accordion>
+
+### macOS Freeze
+
+macOS builds create `.app` bundles with:
+- Icon sets (.icns files)
+- Bundle identifier
+- Proper directory structure
+- Resource management
+
+Source: `ppg/freeze/mac.py:9-24`
+
+```python
+def freeze_mac(debug=False):
+    # Generate .icns icon file
+    if not exists(path('target/Icon.icns')):
+        _generate_iconset()
+        run(['iconutil', '-c', 'icns', path('target/Icon.iconset')], check=True)
+    
+    args = []
+    if not (debug or SETTINGS['show_console_window']):
+        args.append('--windowed')
+    args.extend(['--icon', path('target/Icon.icns')])
+    
+    # Add bundle identifier
+    bundle_identifier = SETTINGS['mac_bundle_identifier']
+    if bundle_identifier:
+        args.extend(['--osx-bundle-identifier', bundle_identifier])
+    
+    run_pyinstaller(args, debug)
+    _remove_unwanted_pyinstaller_files()
+    _generate_resources()
+```
+
+### Linux Freeze
+
+Linux freeze is simpler but still handles distribution-specific requirements:
+
+```python
+from ppg.freeze import run_pyinstaller, _generate_resources
+
+def freeze_linux(debug=False):
+    args = []
+    if not debug:
+        args.append('--windowed')
+    
+    run_pyinstaller(args, debug)
+    _generate_resources()
+```
+
+## Bundle Structure Differences
+
+Each platform has a different output structure:
+
+<Tabs>
+  <Tab title="Windows">
+    ```
+    target/MyApp/
+    ├── MyApp.exe          # Main executable
+    ├── Icon.ico           # Application icon
+    ├── python39.dll       # Python runtime
+    ├── vcruntime140.dll   # Visual C++ runtime
+    └── ... (other DLLs and resources)
+    ```
+  </Tab>
+  
+  <Tab title="macOS">
+    ```
+    target/MyApp.app/
+    └── Contents/
+        ├── Info.plist            # Bundle metadata
+        ├── MacOS/
+        │   └── MyApp             # Main executable
+        └── Resources/
+            ├── Icon.icns         # Application icon
+            └── ... (app resources)
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    ```
+    target/MyApp/
+    ├── MyApp              # Main executable
+    └── ... (resources and libraries)
+    ```
+  </Tab>
+</Tabs>
+
+The freeze directory is automatically determined based on platform:
+
+Source: `ppg/freeze/__init__.py:49`
+
+```python
+output_dir = path('target/' + app_name + ('.app' if is_mac() else ''))
+```
+
+## File Paths and Separators
+
+PPG's `path()` function handles platform-specific path separators automatically:
+
+```python
+from ppg import path
+
+# Always use forward slashes - PPG converts automatically
+config_file = path('src/build/settings/base.json')
+# Windows: C:\Users\...\src\build\settings\base.json
+# macOS/Linux: /home/.../src/build/settings/base.json
+```
+
+Source: `ppg_runtime/_source.py:55-56`
+
+```python
+def path(base_dir, path_str):
+    return normpath(join(base_dir, *path_str.split('/')))
+```
+
+## Installer Differences
+
+Each platform uses different installer formats:
+
+<CardGroup cols={3}>
+  <Card title="Windows" icon="windows">
+    **NSIS Installer**
+    
+    - `.exe` setup file
+    - Registry integration
+    - Start menu shortcuts
+    - Uninstaller
+  </Card>
+  
+  <Card title="macOS" icon="apple">
+    **DMG Disk Image**
+    
+    - `.dmg` file
+    - Drag-to-Applications
+    - No installation required
+    - Code signing ready
+  </Card>
+  
+  <Card title="Linux" icon="linux">
+    **Package Formats**
+    
+    - Ubuntu: `.deb`
+    - Arch: `.pkg.tar.xz`
+    - Fedora: `.rpm`
+    - System integration
+  </Card>
+</CardGroup>
+
+## Platform-Specific Settings
+
+Use separate settings files for each platform:
+
+<CodeGroup>
+
+```json mac.json
+{
+    "mac_bundle_identifier": "com.example.myapp",
+    "freeze_dir": "target/${app_name}.app",
+    "show_console_window": false,
+    "hidden_imports": [
+        "Foundation",
+        "AppKit"
+    ]
+}
+```
+
+```json windows.json
+{
+    "freeze_dir": "target/${app_name}",
+    "installer": "${app_name}Setup.exe",
+    "show_console_window": false,
+    "hidden_imports": [
+        "win32api",
+        "win32con"
+    ]
+}
+```
+
+```json linux.json
+{
+    "description": "My application for Linux",
+    "categories": "Utility;Development;",
+    "freeze_dir": "target/${app_name}",
+    "hidden_imports": [
+        "gi.repository.Gtk"
+    ]
+}
+```
+
+</CodeGroup>
+
+## Platform-Specific Resources
+
+Organize resources by platform using profile-based directories:
+
+```
+src/main/resources/
+├── base/              # Common resources
+│   └── config.json
+├── mac/               # macOS-specific
+│   └── entitlements.plist
+├── windows/           # Windows-specific
+│   └── app.manifest
+└── linux/             # Linux-specific
+    └── app.desktop
+```
+
+Resources are automatically copied based on the active platform:
+
+Source: `ppg/freeze/__init__.py:82-84`
+
+```python
+for profile in LOADED_PROFILES:
+    _copy(path_fn, 'src/main/resources/' + profile, resources_dest_dir)
+    _copy(path_fn, 'src/freeze/' + profile, freeze_dir)
+```
+
+## Desktop Environment Detection (Linux)
+
+On Linux, you can detect the desktop environment:
+
+```python
+from ppg_runtime.platform import is_gnome_based, is_kde_based
+import os
+
+if is_gnome_based():
+    # GNOME, Unity, or Cinnamon
+    print("Using GNOME-based desktop")
+elif is_kde_based():
+    # KDE Plasma
+    print("Using KDE-based desktop")
+
+# Direct environment variable access
+desktop = os.environ.get('XDG_CURRENT_DESKTOP', '')
+```
+
+Source: `ppg_runtime/platform.py:77-86`
+
+## Cross-Platform Build Example
+
+Here's a complete example of a cross-platform build command:
+
+```python
+from ppg.cmdline import command
+from ppg import SETTINGS, activate_profile, path
+from ppg.builtin_commands import freeze, installer
+from ppg_runtime.platform import is_windows, is_mac, is_linux, name
+from ppg_runtime import FbsError
+import os
+
+@command
+def build_release(skip_signing=False):
+    """Create a platform-specific release build"""
+    platform_name = name()
+    print(f"Building release for {platform_name}...")
+    
+    # Activate release profile
+    activate_profile('release')
+    
+    # Freeze the application
+    freeze()
+    
+    # Platform-specific post-freeze steps
+    if is_windows():
+        # Copy additional Windows DLLs if needed
+        import shutil
+        freeze_dir = path('${freeze_dir}')
+        # shutil.copy('path/to/custom.dll', freeze_dir)
+        
+    elif is_mac():
+        # Adjust macOS bundle if needed
+        bundle_path = path('${freeze_dir}')
+        plist_path = os.path.join(bundle_path, 'Contents', 'Info.plist')
+        # Modify Info.plist if needed
+        
+    elif is_linux():
+        # Set executable permissions
+        import stat
+        exe_path = path(f'${{freeze_dir}}/{SETTINGS["app_name"]}')
+        os.chmod(exe_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    
+    # Create installer
+    installer()
+    
+    print(f"Release build complete for {platform_name}!")
+    print(f"Output: {path('target')}")
+```
+
+## Testing on Multiple Platforms
+
+Best practices for multi-platform development:
+
+1. **Use Virtual Machines or CI/CD** - Test on actual target platforms
+2. **Conditional Imports** - Import platform-specific modules conditionally
+3. **Path Handling** - Always use PPG's `path()` function
+4. **Resource Loading** - Use platform-independent resource loading
+5. **Settings Separation** - Keep platform-specific settings in separate files
+
+<Tip>
+Use GitHub Actions, Azure Pipelines, or similar CI/CD services to build and test on all platforms automatically.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/advanced/deployment">
+    Learn about code signing, notarization, and distribution
+  </Card>
+  <Card title="Build Settings" icon="gear" href="/advanced/build-settings">
+    Configure platform-specific build settings
+  </Card>
+</CardGroup>

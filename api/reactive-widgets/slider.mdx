@@ -1,0 +1,427 @@
+---
+title: ReactiveSlider
+description: Numeric slider widget with bidirectional Pydux store synchronization
+---
+
+## Overview
+
+`ReactiveSlider` is a reactive wrapper around Qt's `QSlider` that provides two-way data binding with your Pydux store. User interactions automatically update integer values in the store, and store changes automatically update the slider position.
+
+**Source:** `ppg_runtime/ReactiveWidgets/slider.py:20`
+
+## Inheritance
+
+```python
+ReactiveSlider(QSlider)
+```
+
+Inherits all methods and properties from Qt's `QSlider`.
+
+## Constructor
+
+```python
+ReactiveSlider(
+    parent,
+    key: str,
+    orientation = None,
+    onChange = None,
+    minimum: int = 0,
+    maximum: int = 100,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()`, `update_store()`, and `get_nested()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind to. Supports nested keys using dot notation (e.g., `"settings.volume"`).
+  
+  The value should be an integer in the store.
+</ParamField>
+
+<ParamField path="orientation" type="Qt.Orientation" default="Qt.Horizontal">
+  Slider orientation. Can be:
+  - `Qt.Horizontal` - Horizontal slider (default)
+  - `Qt.Vertical` - Vertical slider
+  
+  Import from `PySide6.QtCore` or equivalent.
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[int], None]" default="None">
+  Optional callback function called when the slider value changes.
+  
+  Receives the new integer value.
+</ParamField>
+
+<ParamField path="minimum" type="int" default="0">
+  Minimum slider value.
+</ParamField>
+
+<ParamField path="maximum" type="int" default="100">
+  Maximum slider value.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QSlider` constructor.
+</ParamField>
+
+## Methods
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Internal method that synchronizes the slider value with the store. Called automatically when store changes.
+
+**Behavior:**
+- Retrieves integer value from store using `parent.get_nested(key)`
+- Defaults to `minimum` if key not found
+- Converts value to integer
+- Updates slider only if value differs
+- Uses `_updating_from_store` flag to prevent circular updates
+- Supports nested keys
+
+**Source:** `ppg_runtime/ReactiveWidgets/slider.py:73`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/slider.py:89`
+
+### _on_value_changed(value)
+
+```python
+def _on_value_changed(self, value: int)
+```
+
+Internal callback connected to Qt's `valueChanged` signal. Updates the store when user moves the slider.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+<ParamField path="value" type="int">
+  The new slider value.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/slider.py:56`
+
+## Usage Examples
+
+### Basic Horizontal Slider
+
+Simple volume control:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveSlider
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"volume": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSlider(
+            self,
+            key="volume",
+            minimum=0,
+            maximum=100
+        ).setGeometry(20, 20, 300, 30)
+```
+
+### Vertical Slider
+
+Vertical orientation:
+
+```python
+from PySide6.QtCore import Qt
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"level": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSlider(
+            self,
+            key="level",
+            orientation=Qt.Vertical,
+            minimum=0,
+            maximum=100
+        ).setGeometry(20, 20, 30, 300)
+```
+
+### With Live Value Display
+
+Show current value with label:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveSlider, ReactiveLabel
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "brightness": int,
+        })
+        self.update_store({"brightness": 50})  # Default value
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Slider
+        ReactiveSlider(
+            self,
+            key="brightness",
+            minimum=0,
+            maximum=100
+        ).setGeometry(20, 20, 300, 30)
+        
+        # Live value display
+        ReactiveLabel(
+            self,
+            text="Brightness: {brightness}%"
+        ).setGeometry(330, 20, 150, 30)
+```
+
+### With Change Callback
+
+React to slider changes:
+
+```python
+def on_volume_change(value):
+    print(f"Volume: {value}%")
+    # Update audio system
+    set_system_volume(value)
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"volume": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSlider(
+            self,
+            key="volume",
+            minimum=0,
+            maximum=100,
+            onChange=on_volume_change
+        ).setGeometry(20, 20, 300, 30)
+```
+
+### Nested State
+
+Access nested settings:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "audio": {
+                "volume": int,
+                "bass": int,
+                "treble": int,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveSlider(self, key="audio.volume", minimum=0, maximum=100).setGeometry(20, 20, 300, 30)
+        ReactiveSlider(self, key="audio.bass", minimum=-10, maximum=10).setGeometry(20, 60, 300, 30)
+        ReactiveSlider(self, key="audio.treble", minimum=-10, maximum=10).setGeometry(20, 100, 300, 30)
+```
+
+### Custom Range
+
+Non-standard min/max values:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"temperature": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Temperature range: -20 to 50 degrees
+        ReactiveSlider(
+            self,
+            key="temperature",
+            minimum=-20,
+            maximum=50
+        ).setGeometry(20, 20, 400, 30)
+        
+        ReactiveLabel(
+            self,
+            text="Temperature: {temperature}°C"
+        ).setGeometry(430, 20, 150, 30)
+```
+
+### Multi-Slider Control Panel
+
+Multiple sliders for different settings:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "red": int,
+            "green": int,
+            "blue": int,
+        })
+        self.update_store({"red": 128, "green": 128, "blue": 128})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # RGB color sliders
+        y = 20
+        for color in ["red", "green", "blue"]:
+            ReactiveLabel(self, text=f"{color.capitalize()}: {{{color}}}").setGeometry(20, y, 100, 30)
+            ReactiveSlider(
+                self,
+                key=color,
+                minimum=0,
+                maximum=255
+            ).setGeometry(130, y, 300, 30)
+            y += 40
+```
+
+### With Tick Marks
+
+Add visual tick marks:
+
+```python
+from PySide6.QtWidgets import QSlider
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"value": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        slider = ReactiveSlider(
+            self,
+            key="value",
+            minimum=0,
+            maximum=100
+        )
+        slider.setGeometry(20, 20, 400, 50)
+        slider.setTickPosition(QSlider.TicksBelow)
+        slider.setTickInterval(10)
+```
+
+### Stepped Values
+
+Snap to specific increments:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"value": int})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        slider = ReactiveSlider(
+            self,
+            key="value",
+            minimum=0,
+            maximum=100
+        )
+        slider.setGeometry(20, 20, 400, 30)
+        slider.setSingleStep(5)  # Move by 5 when using arrow keys
+        slider.setPageStep(10)   # Move by 10 when clicking track
+```
+
+## Common Use Cases
+
+### Volume/Audio Controls
+
+```python
+ReactiveSlider(self, key="volume", minimum=0, maximum=100)
+ReactiveSlider(self, key="balance", minimum=-100, maximum=100)
+```
+
+### Brightness/Opacity
+
+```python
+ReactiveSlider(self, key="brightness", minimum=0, maximum=100)
+ReactiveSlider(self, key="opacity", minimum=0, maximum=100)
+```
+
+### Zoom Level
+
+```python
+ReactiveSlider(self, key="zoom", minimum=10, maximum=400)
+```
+
+### Percentage/Rating
+
+```python
+ReactiveSlider(self, key="progress", minimum=0, maximum=100)
+ReactiveSlider(self, key="rating", minimum=1, maximum=5)
+```
+
+### Temperature/Speed Control
+
+```python
+ReactiveSlider(self, key="temperature", minimum=15, maximum=30)
+ReactiveSlider(self, key="speed", minimum=0, maximum=200)
+```
+
+## Important Notes
+
+- **Integer values only**: Slider values are always integers
+- **Default value**: Defaults to `minimum` if key not found in store
+- **Two-way binding**: Changes flow both ways automatically
+- **Circular update prevention**: Uses `_updating_from_store` flag
+- **Nested key support**: Use dot notation for nested objects
+- **All QSlider methods work**: setTickPosition(), setTickInterval(), setSingleStep(), etc.
+- **Range validation**: Values automatically clamped to min/max range
+
+## Float Values
+
+For floating-point values, use a multiplier:
+
+```python
+def on_slider_change(value):
+    float_value = value / 100.0  # Convert 0-100 to 0.0-1.0
+    print(f"Float value: {float_value}")
+
+ReactiveSlider(
+    self,
+    key="intValue",
+    minimum=0,
+    maximum=100,
+    onChange=on_slider_change
+)
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveSpinBox" icon="arrow-up-1-9" href="/api/reactive-widgets/spin-box">
+    For numeric input with buttons
+  </Card>
+  <Card title="ReactiveLabel" icon="tag" href="/api/reactive-widgets/label">
+    For displaying slider values
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

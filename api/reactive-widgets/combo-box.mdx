@@ -1,0 +1,445 @@
+---
+title: ReactiveComboBox
+description: Dropdown selector widget with bidirectional Pydux store synchronization and dynamic item support
+---
+
+## Overview
+
+`ReactiveComboBox` is a reactive wrapper around Qt's `QComboBox` that provides two-way data binding with your Pydux store. It supports both static item lists and dynamic items loaded from the store.
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:16`
+
+## Inheritance
+
+```python
+ReactiveComboBox(QComboBox)
+```
+
+Inherits all methods and properties from Qt's `QComboBox`.
+
+## Constructor
+
+```python
+ReactiveComboBox(
+    parent,
+    key: str,
+    items = None,
+    dynamic_items = None,
+    onChange = None,
+    **kwargs
+)
+```
+
+### Parameters
+
+<ParamField path="parent" type="QWidget" required>
+  Parent widget containing the Pydux store. Must have `subscribe_to_store()`, `update_store()`, and `get_nested()` methods.
+</ParamField>
+
+<ParamField path="key" type="str" required>
+  Store key to bind the selected value to. Supports nested keys using dot notation (e.g., `"user.country"`).
+  
+  This stores the currently selected item text.
+</ParamField>
+
+<ParamField path="items" type="list" default="None">
+  Static list of items to display in the dropdown.
+  
+  Example: `["Option 1", "Option 2", "Option 3"]`
+  
+  Items are converted to strings for display.
+</ParamField>
+
+<ParamField path="dynamic_items" type="str" default="None">
+  Store key containing a dynamic list of items. When the store updates this key, the dropdown items update automatically.
+  
+  Example: `"availableCountries"` - refers to `store["availableCountries"]`
+  
+  If both `items` and `dynamic_items` are provided, `dynamic_items` takes precedence.
+</ParamField>
+
+<ParamField path="onChange" type="Callable[[str], None]" default="None">
+  Optional callback function called when the selection changes.
+  
+  Receives the selected item text as a string.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Additional keyword arguments passed to `QComboBox` constructor.
+</ParamField>
+
+## Methods
+
+### _get_items()
+
+```python
+def _get_items(self) -> list
+```
+
+Returns the current list of items (from dynamic store key or static list).
+
+**Returns:** List of items to display in the dropdown.
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:51`
+
+### _update_items()
+
+```python
+def _update_items(self)
+```
+
+Updates the ComboBox items from the store or static list.
+
+**Behavior:**
+- Preserves current selection if still valid
+- Clears and repopulates the dropdown
+- Blocks signals during update to prevent spurious events
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:59`
+
+### _update_from_store()
+
+```python
+def _update_from_store(self)
+```
+
+Synchronizes both the item list (if dynamic) and the selected value with the store.
+
+**Behavior:**
+- Updates items if `dynamic_items` is configured
+- Updates selection to match store value
+- Uses `_updating_from_store` flag to prevent circular updates
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:88`
+
+### on_store_change(store)
+
+```python
+def on_store_change(self, store)
+```
+
+Callback invoked automatically when the Pydux store changes. Delegates to `_update_from_store()`.
+
+<ParamField path="store" type="dict">
+  The updated store state.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:100`
+
+### _on_text_changed(text)
+
+```python
+def _on_text_changed(self, text: str)
+```
+
+Internal callback connected to Qt's `currentTextChanged` signal. Updates the store when user selects an item.
+
+**Behavior:**
+- Checks `_updating_from_store` flag to prevent circular updates
+- For nested keys, uses `parent.update_nested_model()`
+- For simple keys, uses `parent.update_store()`
+- Triggers `onChange` callback if provided
+
+<ParamField path="text" type="str">
+  The selected item text.
+</ParamField>
+
+**Source:** `ppg_runtime/ReactiveWidgets/combo_box.py:70`
+
+## Usage Examples
+
+### Static Items
+
+Fixed dropdown list:
+
+```python
+from ppg_runtime.ReactiveWidgets import ReactiveComboBox
+from PySide6.QtWidgets import QMainWindow
+from ppg_runtime.application_context import PPGLifeCycle, Pydux
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"country": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveComboBox(
+            self,
+            key="country",
+            items=["USA", "Canada", "Mexico", "UK", "France"]
+        ).setGeometry(20, 20, 200, 30)
+```
+
+### Dynamic Items from Store
+
+Dropdown that updates when store changes:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "selectedCity": str,
+            "availableCities": list,
+        })
+        
+        # Initialize with some cities
+        self.update_store({
+            "availableCities": ["New York", "Los Angeles", "Chicago"]
+        })
+        
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveComboBox(
+            self,
+            key="selectedCity",
+            dynamic_items="availableCities"
+        ).setGeometry(20, 20, 200, 30)
+    
+    def add_city(self, city_name):
+        # Add new city to the list
+        cities = self.store.get("availableCities", [])
+        cities.append(city_name)
+        self.update_store({"availableCities": cities})
+```
+
+### Nested State
+
+Access nested configuration:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "user": {
+                "country": str,
+                "language": str,
+            }
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveComboBox(
+            self,
+            key="user.country",
+            items=["USA", "UK", "Canada"]
+        ).setGeometry(20, 20, 200, 30)
+        
+        ReactiveComboBox(
+            self,
+            key="user.language",
+            items=["English", "Spanish", "French"]
+        ).setGeometry(20, 60, 200, 30)
+```
+
+### With Change Callback
+
+React to selection changes:
+
+```python
+def on_country_change(country):
+    print(f"Country changed to: {country}")
+    # Load cities for selected country
+    cities = get_cities_for_country(country)
+    self.update_store({"availableCities": cities})
+
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "country": str,
+            "city": str,
+            "availableCities": list,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        # Country selector
+        ReactiveComboBox(
+            self,
+            key="country",
+            items=["USA", "Canada", "UK"],
+            onChange=on_country_change
+        ).setGeometry(20, 20, 200, 30)
+        
+        # City selector (dynamic based on country)
+        ReactiveComboBox(
+            self,
+            key="city",
+            dynamic_items="availableCities"
+        ).setGeometry(20, 60, 200, 30)
+```
+
+### Cascading Dropdowns
+
+Multiple dependent dropdowns:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "category": str,
+            "subcategory": str,
+            "item": str,
+            "subcategories": list,
+            "items": list,
+        })
+        self.subscribe_to_store(self)
+    
+    def on_category_change(self, category):
+        subcats = self.get_subcategories(category)
+        self.update_store({
+            "subcategories": subcats,
+            "subcategory": "",
+            "items": [],
+        })
+    
+    def on_subcategory_change(self, subcategory):
+        items = self.get_items(self.store["category"], subcategory)
+        self.update_store({"items": items})
+    
+    def render_(self):
+        # Category
+        ReactiveComboBox(
+            self,
+            key="category",
+            items=["Electronics", "Clothing", "Books"],
+            onChange=self.on_category_change
+        ).setGeometry(20, 20, 200, 30)
+        
+        # Subcategory
+        ReactiveComboBox(
+            self,
+            key="subcategory",
+            dynamic_items="subcategories",
+            onChange=self.on_subcategory_change
+        ).setGeometry(20, 60, 200, 30)
+        
+        # Item
+        ReactiveComboBox(
+            self,
+            key="item",
+            dynamic_items="items"
+        ).setGeometry(20, 100, 200, 30)
+```
+
+### Settings Dropdown
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({
+            "theme": str,
+            "fontSize": str,
+        })
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        ReactiveComboBox(
+            self,
+            key="theme",
+            items=["Light", "Dark", "Auto"]
+        ).setGeometry(20, 20, 200, 30)
+        
+        ReactiveComboBox(
+            self,
+            key="fontSize",
+            items=["Small", "Medium", "Large", "Extra Large"]
+        ).setGeometry(20, 60, 200, 30)
+```
+
+### Searchable Dropdown
+
+Enable built-in search:
+
+```python
+class MyWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        self.set_schema({"country": str})
+        self.subscribe_to_store(self)
+    
+    def render_(self):
+        combo = ReactiveComboBox(
+            self,
+            key="country",
+            items=["Afghanistan", "Albania", "Algeria", "..."]
+        )
+        combo.setEditable(True)  # Makes it searchable
+        combo.setInsertPolicy(QComboBox.NoInsert)  # Prevent adding new items
+        combo.setGeometry(20, 20, 250, 30)
+```
+
+## Common Use Cases
+
+### Form Selection Fields
+
+```python
+ReactiveComboBox(self, key="country", items=["USA", "UK", "Canada"])
+ReactiveComboBox(self, key="state", dynamic_items="states")
+```
+
+### Settings/Preferences
+
+```python
+ReactiveComboBox(self, key="theme", items=["Light", "Dark", "Auto"])
+ReactiveComboBox(self, key="language", items=["English", "Spanish", "French"])
+```
+
+### Filter/Sort Options
+
+```python
+ReactiveComboBox(self, key="sortBy", items=["Name", "Date", "Size"])
+ReactiveComboBox(self, key="filterBy", items=["All", "Active", "Completed"])
+```
+
+### Data Source Selection
+
+```python
+ReactiveComboBox(self, key="dataSource", dynamic_items="availableSources")
+```
+
+## Important Notes
+
+- **String values**: Store value is always the selected item text as a string
+- **Dynamic updates**: With `dynamic_items`, both items and selection update from store
+- **Two-way binding**: Selection changes update store, store changes update selection
+- **Circular update prevention**: Uses `_updating_from_store` flag
+- **Nested key support**: Use dot notation for nested objects
+- **Preserved selection**: Current selection maintained if still valid after item update
+- **All QComboBox methods work**: setEditable(), setMaxCount(), setMaxVisibleItems(), etc.
+
+## Advanced Features
+
+### Custom Item Display
+
+Use Qt's item delegate for custom rendering:
+
+```python
+from PySide6.QtWidgets import QStyledItemDelegate
+
+combo = ReactiveComboBox(self, key="user", items=["Alice", "Bob", "Charlie"])
+combo.setItemDelegate(QStyledItemDelegate())
+```
+
+### Icons in Items
+
+```python
+from PySide6.QtGui import QIcon
+
+combo = ReactiveComboBox(self, key="file", items=["doc.txt", "image.png"])
+combo.setItemIcon(0, QIcon("file.png"))
+combo.setItemIcon(1, QIcon("image.png"))
+```
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="ReactiveCheckBox" icon="square-check" href="/api/reactive-widgets/check-box">
+    For boolean toggles
+  </Card>
+  <Card title="ReactiveSlider" icon="sliders" href="/api/reactive-widgets/slider">
+    For numeric range selection
+  </Card>
+  <Card title="Pydux" icon="database" href="/core/pydux">
+    Learn about store state management
+  </Card>
+</CardGroup>

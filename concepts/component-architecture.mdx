@@ -1,0 +1,279 @@
+---
+title: Component Architecture
+description: Learn about PPG's React-inspired component model for building desktop applications
+---
+
+## Overview
+
+PPG introduces a **React-inspired component architecture** for Qt desktop applications. Traditional Qt is event-driven but lacks a structured lifecycle for managing UI components at a high level. This can lead to complex, hard-to-maintain code as applications grow.
+
+PPG solves this with a well-defined component lifecycle that provides clear hooks for every stage of a component's life, from creation to destruction.
+
+<Note>
+The component architecture works seamlessly with both native Qt widgets and hybrid web components, making it easy to build modern, maintainable applications.
+</Note>
+
+## The PPGLifeCycle Mixin
+
+At the heart of PPG's component system is the `PPGLifeCycle` mixin class. It provides the lifecycle methods that structure your component's behavior:
+
+```python
+from ppg_runtime.application_context import PPGLifeCycle
+from PySide6.QtWidgets import QMainWindow
+
+class MyWindow(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        # Initialize state, subscribe to stores
+        pass
+    
+    def render_(self):
+        # Create and configure UI elements
+        pass
+    
+    def component_did_mount(self):
+        # Perform actions after UI is ready
+        pass
+    
+    def set_CSS(self):
+        # Apply styles
+        pass
+    
+    def responsive_UI(self):
+        # Handle layout and responsiveness
+        pass
+```
+
+## The @init_lifecycle Decorator
+
+To activate the component lifecycle, use the `@init_lifecycle` decorator. This decorator automatically calls the lifecycle methods in the correct order when your component is instantiated:
+
+```python
+from ppg_runtime.application_context import init_lifecycle, PPGLifeCycle
+from PySide6.QtWidgets import QMainWindow
+
+@init_lifecycle
+class MyComponent(QMainWindow, PPGLifeCycle):
+    def component_will_mount(self):
+        print("Component is about to mount")
+    
+    def render_(self):
+        print("Rendering UI")
+    
+    def component_did_mount(self):
+        print("Component mounted successfully")
+```
+
+<Info>
+The `@init_lifecycle` decorator modifies your class's `__init__` method to automatically execute the lifecycle hooks in this order:
+1. `component_will_mount()`
+2. `allow_bg()` 
+3. `render_()`
+4. `component_did_mount()`
+5. `set_CSS()`
+6. `responsive_UI()`
+</Info>
+
+## Component Structure and Organization
+
+PPG components follow a clear structure that separates concerns:
+
+### Initialization Phase
+
+Use `component_will_mount()` to set up your component before rendering:
+
+```python
+def component_will_mount(self):
+    # Subscribe to global state
+    self.subscribe_to_store(self)
+    
+    # Define state schema
+    self.set_schema({
+        "greeting": str,
+        "count": int
+    })
+    
+    # Initialize local variables
+    self.data = []
+```
+
+### Rendering Phase
+
+The `render_()` method is where you create and configure your UI elements:
+
+```python
+def render_(self):
+    # Create widgets
+    self.label = QLabel('Hello World!', self)
+    self.button = QPushButton('Click Me', self)
+    
+    # Configure widgets
+    self.button.clicked.connect(self.handle_click)
+    
+    # Use reactive widgets that auto-sync with state
+    from ppg_runtime.ReactiveWidgets import Label, LineEdit
+    Label(self, key="greeting").move(20, 20)
+    LineEdit(self, key="greeting", placeholder="Enter text...").move(20, 60)
+```
+
+### Post-Render Phase
+
+Use `component_did_mount()` for actions that require the UI to be fully initialized:
+
+```python
+def component_did_mount(self):
+    # Fetch data from API
+    self.load_initial_data()
+    
+    # Start timers or background tasks
+    self.timer = QTimer()
+    self.timer.timeout.connect(self.update_data)
+    self.timer.start(1000)
+```
+
+## Comparison with Traditional Qt
+
+<Accordion title="Traditional Qt Approach">
+```python
+class TraditionalWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        
+        # Everything mixed together in __init__
+        self.data = []
+        self.label = QLabel('Hello', self)
+        self.button = QPushButton('Click', self)
+        self.button.clicked.connect(self.on_click)
+        self.label.move(20, 20)
+        self.button.move(20, 60)
+        self.setStyleSheet("...")
+        self.load_data()
+    
+    def on_click(self):
+        # Event handlers scattered throughout
+        pass
+    
+    def load_data(self):
+        # No clear separation of concerns
+        pass
+```
+</Accordion>
+
+<Accordion title="PPG Component Approach">
+```python
+@init_lifecycle
+class PPGWindow(QMainWindow, PPGLifeCycle, Pydux):
+    def component_will_mount(self):
+        # Clear initialization phase
+        self.subscribe_to_store(self)
+        self.set_schema({"message": str})
+    
+    def render_(self):
+        # Dedicated rendering phase
+        self.label = QLabel('Hello', self)
+        self.button = QPushButton('Click', self)
+        self.button.clicked.connect(self.on_click)
+    
+    def component_did_mount(self):
+        # Post-render actions
+        self.load_data()
+    
+    def set_CSS(self):
+        # Styling separated
+        self.setStyleSheet("...")
+    
+    def responsive_UI(self):
+        # Layout logic separated
+        self.label.move(20, 20)
+        self.button.move(20, 60)
+    
+    def on_click(self):
+        self.update_store({"message": "Clicked!"})
+    
+    def load_data(self):
+        # Business logic separated
+        pass
+```
+</Accordion>
+
+## Benefits of Component Architecture
+
+<Steps>
+  <Step title="Clear Separation of Concerns">
+    Each lifecycle method has a specific purpose, making code easier to understand and maintain.
+  </Step>
+  
+  <Step title="Predictable Execution Order">
+    The `@init_lifecycle` decorator ensures lifecycle methods run in the correct sequence every time.
+  </Step>
+  
+  <Step title="Easy State Management">
+    Integration with Pydux allows components to subscribe to global state changes automatically.
+  </Step>
+  
+  <Step title="Reusable Components">
+    Well-structured components can be easily reused across your application.
+  </Step>
+  
+  <Step title="Testability">
+    Separated concerns make it easier to test individual parts of your component.
+  </Step>
+</Steps>
+
+## Helper Methods
+
+The `PPGLifeCycle` mixin provides several utility methods:
+
+### destroyComponent()
+
+Safely remove a component from the UI:
+
+```python
+def close_modal(self):
+    self.modal.destroyComponent()
+```
+
+### find(type, name)
+
+Find child widgets by type and name:
+
+```python
+def get_button(self):
+    button = self.find(QPushButton, "myButton")
+    return button
+```
+
+### calc(a, b)
+
+Calculate percentages for responsive layouts:
+
+```python
+def responsive_UI(self):
+    # Button width is 50% of window width
+    width = self.calc(self.width(), 50)
+    self.button.resize(width, 40)
+```
+
+## Resource Management
+
+PPG components have built-in resource management:
+
+```python
+def component_did_mount(self):
+    # Get resource path (works in dev and production)
+    icon_path = self.get_resource('icons', 'logo.png')
+    self.label.setPixmap(QPixmap(icon_path))
+    
+    # Access build settings
+    version = self.build_settings['version']
+    self.setWindowTitle(f"My App v{version}")
+```
+
+<Note>
+The `get_resource()` method automatically resolves paths whether you're running from source or a compiled application.
+</Note>
+
+## Next Steps
+
+- Learn about the [Component Lifecycle](/concepts/component-lifecycle) hooks in detail
+- Explore [State Management](/concepts/state-management) with Pydux
+- Discover [Reactive Widgets](/concepts/reactive-widgets) for automatic UI updates

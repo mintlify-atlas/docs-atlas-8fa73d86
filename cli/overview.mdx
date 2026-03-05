@@ -1,0 +1,118 @@
+---
+title: CLI Commands Overview
+description: Complete guide to PPG's command-line interface
+---
+
+## Introduction
+
+The PPG CLI provides a comprehensive set of commands to manage your desktop application's entire lifecycle - from project initialization to building production-ready installers. All commands are invoked using `ppg <command>` in your terminal.
+
+## Available Commands
+
+<CardGroup cols={2}>
+  <Card title="ppg init" icon="sparkles" href="/cli/init">
+    Initialize a new PPG project with interactive setup
+  </Card>
+  <Card title="ppg start" icon="play" href="/cli/start">
+    Run your application from source in development mode
+  </Card>
+  <Card title="ppg create" icon="code" href="/cli/create">
+    Generate components and views from templates
+  </Card>
+  <Card title="ppg freeze" icon="cube" href="/cli/freeze">
+    Compile your app into a standalone executable
+  </Card>
+  <Card title="ppg installer" icon="box" href="/cli/installer">
+    Create platform-specific installers for distribution
+  </Card>
+  <Card title="ppg test" icon="vial" href="/cli/test">
+    Run your project's automated test suite
+  </Card>
+  <Card title="ppg clean" icon="broom" href="/cli/clean">
+    Remove build artifacts and temporary files
+  </Card>
+  <Card title="ppg version" icon="tag" href="/cli/overview">
+    Show the current PPG version
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Starting a New Project
+
+```bash
+# Create a new project
+ppg init
+
+# Run it in development mode
+ppg start
+```
+
+### Development Cycle
+
+```bash
+# Create new components as you build
+ppg create component
+
+# Test your changes
+ppg test
+
+# Run the app to see changes
+ppg start
+```
+
+### Building for Production
+
+```bash
+# Clean previous builds
+ppg clean
+
+# Compile to executable
+ppg freeze
+
+# Create installer
+ppg installer
+```
+
+## Command Line Parser
+
+PPG's CLI is built on Python's `argparse` module with custom command registration through the `@command` decorator. Each command is automatically discovered and made available when you run `ppg`.
+
+### Getting Help
+
+You can get help for any command:
+
+```bash
+# General help
+ppg --help
+
+# Command-specific help
+ppg freeze --help
+```
+
+## Command Categories
+
+### Project Management
+- `init` - Initialize new projects
+- `version` - Check PPG version
+
+### Development
+- `start` - Run from source
+- `create` - Generate code scaffolding
+- `test` - Run tests
+
+### Build & Distribution
+- `freeze` - Compile executable
+- `installer` - Create installers
+- `clean` - Clean build artifacts
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Initialize Your First Project" icon="rocket" href="/cli/init">
+    Learn how to set up a new PPG application
+  </Card>
+  <Card title="Development Mode" icon="code" href="/cli/start">
+    Start building with hot reloading
+  </Card>
+</CardGroup>

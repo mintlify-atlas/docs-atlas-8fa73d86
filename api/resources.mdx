@@ -1,0 +1,287 @@
+---
+title: 'Resources API'
+description: 'Handle resource files in PPG applications'
+icon: 'folder-open'
+---
+
+## Overview
+
+PPG provides utilities to manage resource files (images, data files, templates) in both development and frozen applications. Resources behave differently when running from source vs. running as a frozen executable.
+
+## copy_with_filtering()
+
+Copy files or directories with optional placeholder replacement.
+
+```python
+from ppg.resources import copy_with_filtering
+
+copy_with_filtering('src/main/resources', 'target/resources')
+```
+
+### Parameters
+
+<ParamField path="src_dir_or_file" type="str" required>
+  Source file or directory path to copy
+</ParamField>
+
+<ParamField path="dest_dir" type="str" required>
+  Destination directory path
+</ParamField>
+
+<ParamField path="replacements" type="dict" default="SETTINGS">
+  Dictionary of key-value pairs for placeholder replacement. Defaults to the global `SETTINGS` dictionary.
+</ParamField>
+
+<ParamField path="files_to_filter" type="list" default="[]">
+  List of file paths that should have placeholders replaced. Other files are copied as-is.
+</ParamField>
+
+<ParamField path="exclude" type="list" default="[]">
+  List of file or directory paths to exclude from copying
+</ParamField>
+
+<ParamField path="placeholder" type="str" default="'${%s}'">
+  Format string for placeholders. Default is `${key}` format.
+</ParamField>
+
+### How It Works
+
+1. **Copy files** from source to destination
+2. **Filter files** in `files_to_filter` list to replace placeholders
+3. **Skip files** in the `exclude` list
+4. **Preserve permissions** of copied files
+
+### Example: Basic Copy
+
+```python
+from ppg.resources import copy_with_filtering
+from ppg import path
+
+# Copy all resources without filtering
+copy_with_filtering(
+    path('src/main/resources'),
+    path('target/resources')
+)
+```
+
+### Example: With Placeholder Replacement
+
+```python
+from ppg.resources import copy_with_filtering
+from ppg import path, SETTINGS
+
+# Copy config file with placeholder replacement
+copy_with_filtering(
+    path('src/main/resources/config.ini'),
+    path('target/config'),
+    files_to_filter=[path('src/main/resources/config.ini')]
+)
+```
+
+If `config.ini` contains:
+```ini
+[app]
+name = ${app_name}
+version = ${version}
+```
+
+The output will have placeholders replaced with values from `SETTINGS`:
+```ini
+[app]
+name = MyApp
+version = 1.0.0
+```
+
+### Example: Custom Replacements
+
+```python
+from ppg.resources import copy_with_filtering
+
+# Use custom replacement values
+custom_vars = {
+    'database_url': 'postgresql://localhost/mydb',
+    'api_endpoint': 'https://api.example.com'
+}
+
+copy_with_filtering(
+    'templates/config.yaml',
+    'output',
+    replacements=custom_vars,
+    files_to_filter=['templates/config.yaml']
+)
+```
+
+### Example: Exclude Files
+
+```python
+from ppg.resources import copy_with_filtering
+from ppg import path
+
+# Copy directory but exclude .pyc and __pycache__
+copy_with_filtering(
+    path('src/main/python'),
+    path('target/app'),
+    exclude=[
+        path('src/main/python/__pycache__'),
+        path('src/main/python/**/*.pyc')
+    ]
+)
+```
+
+## ResourceLocator
+
+Locate resources from multiple possible directories.
+
+```python
+from ppg_runtime._resources import ResourceLocator
+
+locator = ResourceLocator(['/path/to/resources1', '/path/to/resources2'])
+resource_path = locator.locate('icons', 'app.png')
+```
+
+### Constructor
+
+<ParamField path="resource_dirs" type="list[str]" required>
+  List of directory paths to search for resources, in priority order
+</ParamField>
+
+### locate()
+
+Find a resource file in the configured directories.
+
+```python
+resource_path = locator.locate('subfolder', 'file.txt')
+```
+
+<ParamField path="*rel_path" type="str" required>
+  Path components relative to resource directories (variable arguments)
+</ParamField>
+
+**Returns:** `str` - Absolute path to the located resource
+
+**Raises:** `FileNotFoundError` if the resource is not found in any directory
+
+### Example
+
+```python
+from ppg_runtime._resources import ResourceLocator
+from ppg import path
+import os
+
+# Set up resource directories (in priority order)
+resource_dirs = [
+    path('src/main/resources'),
+    path('src/main/icons'),
+    '/usr/share/myapp/resources'  # System-wide fallback
+]
+
+locator = ResourceLocator(resource_dirs)
+
+try:
+    # Locate icon - searches all directories
+    icon = locator.locate('icons', 'app.png')
+    print(f"Found icon: {icon}")
+except FileNotFoundError as e:
+    print(f"Icon not found: {e}")
+
+# Locate config file
+config = locator.locate('config', 'settings.json')
+```
+
+## Resource Paths in Development vs. Frozen
+
+Resource handling differs between running from source and running as a frozen app:
+
+### Development (Running from Source)
+
+```python
+from ppg import path
+
+# Resources are in your source directory
+resource_file = path('src/main/resources/data.json')
+```
+
+### Frozen Application
+
+When frozen, resources are bundled with your app:
+
+```python
+import sys
+from os.path import join, dirname
+
+if getattr(sys, 'frozen', False):
+    # Running as frozen executable
+    app_dir = dirname(sys.executable)
+    resource_file = join(app_dir, 'resources', 'data.json')
+else:
+    # Running from source
+    from ppg import path
+    resource_file = path('src/main/resources/data.json')
+```
+
+### Best Practice: Abstraction
+
+Create a helper function to handle both cases:
+
+```python
+import sys
+from os.path import join, dirname
+
+def get_resource_path(relative_path):
+    """Get resource path for both dev and frozen app."""
+    if getattr(sys, 'frozen', False):
+        # Frozen app
+        base_dir = dirname(sys.executable)
+        return join(base_dir, relative_path)
+    else:
+        # Development
+        from ppg import path
+        return path(f'src/main/resources/{relative_path}')
+
+# Use it anywhere
+data_file = get_resource_path('data/config.json')
+icon_file = get_resource_path('icons/app.png')
+```
+
+## Complete Example
+
+```python
+from ppg.resources import copy_with_filtering
+from ppg import path, SETTINGS
+import os
+
+def prepare_resources():
+    """Prepare resources for the build."""
+    
+    # Define paths
+    src_resources = path('src/main/resources')
+    dest_resources = path('${freeze_dir}/resources')
+    
+    # Files that need placeholder replacement
+    template_files = [
+        path('src/main/resources/config/app.ini'),
+        path('src/main/resources/about.html')
+    ]
+    
+    # Files to exclude
+    exclude_files = [
+        path('src/main/resources/.DS_Store'),
+        path('src/main/resources/**/*.md')
+    ]
+    
+    # Copy resources with filtering
+    copy_with_filtering(
+        src_resources,
+        dest_resources,
+        replacements=SETTINGS,
+        files_to_filter=template_files,
+        exclude=exclude_files
+    )
+    
+    print(f"Resources copied to {dest_resources}")
+
+if __name__ == '__main__':
+    from ppg import init
+    init('.')
+    prepare_resources()
+```

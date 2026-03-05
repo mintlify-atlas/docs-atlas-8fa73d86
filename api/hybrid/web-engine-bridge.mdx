@@ -1,0 +1,309 @@
+---
+title: WebEngineBridge
+description: Python-JavaScript bridge for Qt WebEngine communication using Qt signals and slots
+---
+
+## Overview
+
+`WebEngineBridge` is a QObject-based class that enables bidirectional communication between Python and JavaScript in Qt WebEngine applications. It uses Qt's signal/slot mechanism and QWebChannel to pass messages between Python backend and web frontend.
+
+## Class Definition
+
+```python
+from ppg_runtime.application_context import WebEngineBridge
+
+bridge = WebEngineBridge()
+```
+
+Inherits from `QObject` and provides signal-based communication.
+
+## Signals
+
+### bridge
+
+```python
+bridge = Signal(str)
+```
+
+Qt signal that emits JSON-formatted messages to the JavaScript frontend.
+
+**Type:** `Signal(str)`
+
+**Emits:** JSON string containing `{"event": str, "payload": Any}`
+
+## Constructor
+
+### \_\_init\_\_()
+
+```python
+bridge = WebEngineBridge()
+```
+
+Initializes the bridge with an empty handlers dictionary.
+
+**Attributes Created:**
+- `handlers` (dict): Dictionary mapping event names to handler functions
+
+## Methods
+
+### register_handler()
+
+Registers a Python function to handle events from JavaScript.
+
+```python
+bridge.register_handler(event_name, func)
+```
+
+<ParamField path="event_name" type="str" required>
+  The name of the event to handle
+</ParamField>
+
+<ParamField path="func" type="callable" required>
+  Function to call when the event is received. Should accept one parameter (payload) and optionally return a value
+</ParamField>
+
+**Example:**
+
+```python
+def handle_login(payload):
+    username = payload.get('username')
+    password = payload.get('password')
+    # Process login
+    return f"User {username} logged in successfully"
+
+bridge.register_handler("login", handle_login)
+```
+
+### send()
+
+Receives messages from JavaScript and dispatches them to registered handlers.
+
+```python
+@Slot(str, result=str)
+def send(message_json: str) -> str
+```
+
+<ParamField path="message_json" type="str" required>
+  JSON string containing `{"event": str, "payload": Any}`
+</ParamField>
+
+**Returns:** JSON string with response format:
+- Success: `{"success": True, "data": <handler_result>}`
+- Handler not found: `{"success": False, "error": "Handler for event 'x' not found."}`
+- Exception: `{"success": False, "error": <traceback>}`
+
+**Note:** This is a Qt Slot decorated method called automatically by QWebChannel from JavaScript.
+
+**JavaScript Usage:**
+
+```javascript
+// From JavaScript
+bridge.send(JSON.stringify({
+    event: "login",
+    payload: { username: "john", password: "secret" }
+})).then(responseJSON => {
+    let response = JSON.parse(responseJSON);
+    if (response.success) {
+        console.log(response.data);
+    } else {
+        console.error(response.error);
+    }
+});
+```
+
+### emit_to_ui()
+
+Emits an event from Python to the JavaScript frontend.
+
+```python
+bridge.emit_to_ui(event, payload)
+```
+
+<ParamField path="event" type="str" required>
+  Event name to emit
+</ParamField>
+
+<ParamField path="payload" type="Any" required>
+  Event payload (will be JSON serialized)
+</ParamField>
+
+**Example:**
+
+```python
+# Python side
+bridge.emit_to_ui("notification", {
+    "title": "New Message",
+    "body": "You have a new message"
+})
+```
+
+```javascript
+// JavaScript side - listening for events
+bridge.bridge.connect(function(message) {
+    const data = JSON.parse(message);
+    console.log("Event:", data.event, "Payload:", data.payload);
+    // Output: Event: notification Payload: {title: "New Message", body: "You have a new message"}
+});
+```
+
+## Message Format
+
+### Python to JavaScript
+
+Messages sent from Python to JavaScript via `emit_to_ui()`:
+
+```json
+{
+    "event": "event_name",
+    "payload": { /* any JSON-serializable data */ }
+}
+```
+
+### JavaScript to Python
+
+Messages sent from JavaScript to Python via `send()`:
+
+```json
+{
+    "event": "event_name",
+    "payload": { /* any JSON-serializable data */ }
+}
+```
+
+### Response Format
+
+Python's response to JavaScript:
+
+```json
+// Success
+{
+    "success": true,
+    "data": /* handler return value */
+}
+
+// Error
+{
+    "success": false,
+    "error": "error message or traceback"
+}
+```
+
+## Error Handling
+
+The bridge automatically handles exceptions in registered handlers:
+
+1. **Handler not found:** Returns error response with message
+2. **Exception in handler:** Returns error response with full traceback
+3. **JSON parse error:** Returns error response with exception details
+
+```python
+def risky_handler(payload):
+    # If this raises an exception
+    result = 1 / 0
+    return result
+
+bridge.register_handler("risky", risky_handler)
+
+# JavaScript will receive:
+# {"success": false, "error": "ZeroDivisionError: division by zero\n...traceback..."}
+```
+
+## Complete Example
+
+### Python Side
+
+```python
+from ppg_runtime.application_context import WebEngineBridge
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebChannel import QWebChannel
+from PySide6.QtCore import QUrl
+
+# Create web view
+webview = QWebEngineView()
+webview.load(QUrl.fromLocalFile("index.html"))
+
+# Create bridge
+bridge = WebEngineBridge()
+
+# Register handlers
+def handle_login(payload):
+    username = payload.get('username')
+    return f"Welcome, {username}!"
+
+def handle_data_request(payload):
+    return {"items": [1, 2, 3, 4, 5]}
+
+bridge.register_handler("login", handle_login)
+bridge.register_handler("get_data", handle_data_request)
+
+# Setup QWebChannel
+channel = QWebChannel()
+channel.registerObject("bridge", bridge)
+webview.page().setWebChannel(channel)
+
+# Emit events to JavaScript
+bridge.emit_to_ui("ready", {"message": "Bridge initialized"})
+```
+
+### JavaScript Side (index.html)
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+</head>
+<body>
+    <button id="loginBtn">Login</button>
+    <button id="getDataBtn">Get Data</button>
+    <div id="output"></div>
+
+    <script>
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+            window.bridge = channel.objects.bridge;
+
+            // Listen for events from Python
+            bridge.bridge.connect(function(message) {
+                const data = JSON.parse(message);
+                console.log("Python event:", data.event, data.payload);
+
+                if (data.event === "ready") {
+                    document.getElementById("output").innerText = data.payload.message;
+                }
+            });
+
+            // Send login event
+            document.getElementById("loginBtn").onclick = function() {
+                bridge.send(JSON.stringify({
+                    event: "login",
+                    payload: { username: "john" }
+                })).then(responseJSON => {
+                    let response = JSON.parse(responseJSON);
+                    if (response.success) {
+                        alert(response.data);
+                    }
+                });
+            };
+
+            // Send data request
+            document.getElementById("getDataBtn").onclick = function() {
+                bridge.send(JSON.stringify({
+                    event: "get_data",
+                    payload: {}
+                })).then(responseJSON => {
+                    let response = JSON.parse(responseJSON);
+                    if (response.success) {
+                        console.log("Data:", response.data);
+                    }
+                });
+            };
+        });
+    </script>
+</body>
+</html>
+```
+
+## See Also
+
+- [BridgeManager](/api/hybrid/bridge-manager) - Higher-level wrapper for WebEngineBridge
+- [QWebChannel Documentation](https://doc.qt.io/qt-6/qwebchannel.html) - Qt's web channel system

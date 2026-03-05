@@ -1,0 +1,344 @@
+---
+title: Installation
+description: Install PPG and set up your Python development environment for desktop application development
+---
+
+## System Requirements
+
+Before installing PPG, ensure your system meets these requirements:
+
+- **Python**: 3.8 or higher (3.8, 3.9, 3.10, 3.11, or 3.12)
+- **pip**: Python package installer (usually included with Python)
+- **Operating System**: Windows, macOS, or Linux (Ubuntu, Fedora, Arch, CentOS, Raspbian)
+
+<Note>
+  PPG works with any Qt binding: PyQt5, PyQt6, PySide2, or PySide6. You can choose your preferred binding during project initialization.
+</Note>
+
+## Installation Methods
+
+You can install PPG using pip, from GitHub, or from source.
+
+### Method 1: Install via pip (Recommended)
+
+The simplest way to install PPG is using pip:
+
+```bash
+pip install ppg
+```
+
+This installs the latest stable release from PyPI along with all required dependencies:
+
+- PyInstaller >= 6.9.0
+- pydantic >= 2.11.7
+- questionary == 2.1.0
+- rich == 14.1.0
+- watchdog == 6.0.0
+- astor == 0.8.1
+- prompt_toolkit == 3.0.39
+
+### Method 2: Install from GitHub
+
+To get the latest development version with cutting-edge features:
+
+```bash
+pip install git+https://github.com/neuri-ai/PPG.git
+```
+
+<Warning>
+  Development versions may contain unreleased features and could be less stable than official releases.
+</Warning>
+
+### Method 3: Install from Source
+
+For contributors or those who want to modify PPG:
+
+```bash
+# Clone the repository
+git clone https://github.com/neuri-ai/PPG
+
+# Navigate to the directory
+cd PPG
+
+# Install in development mode
+python setup.py install
+```
+
+## Virtual Environment Setup (Recommended)
+
+Using a virtual environment is strongly recommended to avoid dependency conflicts.
+
+<Tabs>
+  <Tab title="conda">
+    ```bash
+    # Create a new environment with Python 3.11
+    conda create -n my-app python=3.11 -y
+    
+    # Activate the environment
+    conda activate my-app
+    
+    # Install PPG
+    pip install ppg
+    ```
+  </Tab>
+  
+  <Tab title="venv (macOS/Linux)">
+    ```bash
+    # Create a virtual environment
+    python -m venv venv
+    
+    # Activate the environment
+    source venv/bin/activate
+    
+    # Install PPG
+    pip install ppg
+    ```
+  </Tab>
+  
+  <Tab title="venv (Windows)">
+    ```bash
+    # Create a virtual environment
+    python -m venv venv
+    
+    # Activate the environment
+    .\venv\Scripts\activate.bat
+    
+    # Install PPG
+    pip install ppg
+    ```
+  </Tab>
+</Tabs>
+
+## Qt Binding Installation
+
+PPG requires one of the following Qt bindings to be installed. During project initialization (`ppg init`), you'll select your preferred binding, and PPG will automatically install it if not already present.
+
+### Choosing a Qt Binding
+
+<CardGroup cols={2}>
+  <Card title="PySide6 (Recommended)" icon="star">
+    Official Qt for Python bindings with LGPL license
+    ```bash
+    pip install PySide6
+    ```
+  </Card>
+  
+  <Card title="PyQt6" icon="code">
+    Modern PyQt bindings with GPL/Commercial license
+    ```bash
+    pip install PyQt6
+    ```
+  </Card>
+  
+  <Card title="PySide2" icon="cube">
+    Qt 5 official bindings (legacy)
+    ```bash
+    pip install PySide2
+    ```
+  </Card>
+  
+  <Card title="PyQt5" icon="square">
+    Qt 5 PyQt bindings (legacy)
+    ```bash
+    pip install PyQt5
+    ```
+  </Card>
+</CardGroup>
+
+<Info>
+  **Which binding should I choose?**
+  
+  - **PySide6**: Best for most projects. Modern, actively maintained, and LGPL-licensed.
+  - **PyQt6**: Similar to PySide6 but GPL-licensed (or commercial).
+  - **PySide2/PyQt5**: Only if you need Qt 5 compatibility for legacy projects.
+</Info>
+
+### Manual Qt Binding Installation
+
+If you prefer to install the Qt binding manually before running `ppg init`:
+
+<CodeGroup>
+```bash PySide6
+pip install PySide6
+```
+
+```bash PyQt6
+pip install PyQt6
+```
+
+```bash PySide2
+pip install PySide2
+```
+
+```bash PyQt5
+pip install PyQt5
+```
+</CodeGroup>
+
+## Verification
+
+Verify your PPG installation by checking the version:
+
+```bash
+ppg version
+```
+
+You should see output like:
+
+```
+PPG init v1.2.0
+```
+
+<Note>
+  The version number may differ depending on the release you've installed.
+</Note>
+
+## Optional Dependencies
+
+PPG supports optional features that require additional packages:
+
+### Licensing System
+
+For implementing license key functionality in your applications:
+
+```bash
+pip install ppg[licensing]
+```
+
+This installs:
+- rsa >= 3.4.2
+
+### Sentry Integration
+
+For error tracking and monitoring:
+
+```bash
+pip install ppg[sentry]
+```
+
+This installs:
+- sentry-sdk >= 0.6.6
+
+### Upload Functionality
+
+For uploading builds to cloud storage:
+
+```bash
+pip install ppg[upload]
+```
+
+This installs:
+- boto3
+
+### All Optional Dependencies
+
+To install all optional features:
+
+```bash
+pip install ppg[licensing,sentry,upload]
+```
+
+## Platform-Specific Notes
+
+### Windows
+
+- **Visual C++ Redistributable**: Some Qt bindings may require Microsoft Visual C++ Redistributable. Download from [Microsoft's website](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads).
+- **Long Path Support**: Enable long path support if you encounter path length issues during compilation.
+
+### macOS
+
+- **Xcode Command Line Tools**: Required for some compilation features:
+  ```bash
+  xcode-select --install
+  ```
+- **Apple Silicon**: PPG fully supports Apple Silicon (M1/M2) Macs.
+
+### Linux
+
+- **Development Libraries**: Some distributions may require additional development packages:
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install python3-dev build-essential
+```
+
+```bash Fedora/CentOS
+sudo dnf install python3-devel gcc gcc-c++
+```
+
+```bash Arch Linux
+sudo pacman -S base-devel python
+```
+</CodeGroup>
+
+## Troubleshooting
+
+### PPG Command Not Found
+
+If the `ppg` command is not recognized after installation:
+
+1. Ensure your Python Scripts directory is in your PATH
+2. Try running with `python -m ppg` instead
+3. Reinstall PPG: `pip install --force-reinstall ppg`
+
+### Qt Binding Conflicts
+
+If you have multiple Qt bindings installed and encounter import errors:
+
+1. Use a fresh virtual environment
+2. Install only one Qt binding
+3. Verify with: `python -c "import PySide6; print(PySide6.__version__)"`
+
+### Permission Errors
+
+On Linux/macOS, if you encounter permission errors:
+
+```bash
+# Install for current user only
+pip install --user ppg
+```
+
+<Warning>
+  Avoid using `sudo pip install` as it can cause permission and path issues.
+</Warning>
+
+## Upgrading PPG
+
+To upgrade to the latest version:
+
+```bash
+pip install --upgrade ppg
+```
+
+To upgrade to a specific version:
+
+```bash
+pip install ppg==1.2.0
+```
+
+## Uninstalling PPG
+
+To remove PPG from your system:
+
+```bash
+pip uninstall ppg
+```
+
+This removes PPG but keeps the Qt binding and other dependencies. To remove everything:
+
+```bash
+# Uninstall PPG and its dependencies
+pip uninstall ppg PyInstaller pydantic questionary rich watchdog astor prompt_toolkit
+
+# Uninstall Qt binding (choose your binding)
+pip uninstall PySide6  # or PyQt6, PySide2, PyQt5
+```
+
+## Next Steps
+
+Now that PPG is installed, you're ready to create your first project:
+
+<Card title="Quick Start" icon="rocket" href="/quickstart">
+  Create and run your first PPG application in minutes
+</Card>

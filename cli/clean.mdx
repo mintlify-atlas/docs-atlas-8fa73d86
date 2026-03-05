@@ -1,0 +1,466 @@
+---
+title: ppg clean
+description: Remove build artifacts and temporary files
+---
+
+## Overview
+
+The `ppg clean` command removes all build artifacts, compiled files, and temporary data created by the PPG build process. This ensures a fresh build environment.
+
+```bash
+ppg clean
+```
+
+<Info>
+Running `clean` before building is recommended to avoid issues with stale artifacts or corrupted build caches.
+</Info>
+
+## What Gets Removed
+
+The `clean` command deletes the entire `target/` directory and its contents:
+
+```
+target/                       # Entire directory removed
+├── MyApp/                    # Frozen application
+│   ├── MyApp.exe
+│   └── _internal/
+├── MyApp.app/                # macOS bundle
+├── PyInstaller/              # PyInstaller cache
+│   ├── *.spec
+│   └── build/
+├── installer/                # Installer resources
+└── MyApp-1.0.0-Setup.exe    # Generated installer
+```
+
+### Preserved Files
+
+The following are **never** removed:
+
+- `src/` - Your source code
+- `tests/` - Your test files  
+- Configuration files
+- Any other files outside `target/`
+
+## When to Use Clean
+
+### Before Major Builds
+
+Clean before creating production releases:
+
+```bash
+ppg clean
+ppg freeze
+ppg installer
+```
+
+### After Build Errors
+
+If you encounter strange build errors:
+
+```bash
+ppg clean
+ppg freeze  # Try building again
+```
+
+### After Changing Dependencies
+
+When you add or update dependencies:
+
+```bash
+pip install new-package
+ppg clean
+ppg freeze  # Ensure new package is bundled
+```
+
+### After Settings Changes
+
+After modifying `src/build/settings/*.json`:
+
+```bash
+ppg clean
+ppg freeze  # Apply new settings
+```
+
+### Disk Space Cleanup
+
+The `target/` directory can become large:
+
+```bash
+$ du -sh target/
+450M    target/
+
+$ ppg clean
+
+$ du -sh target/
+du: target/: No such file or directory
+```
+
+## Usage Examples
+
+### Basic Clean
+
+```bash
+$ ppg clean
+# Silently removes target/ directory
+```
+
+### Clean and Rebuild
+
+```bash
+$ ppg clean && ppg freeze
+
+# Clean successful
+⏳ Freezing your app...
+# Build continues...
+```
+
+### Clean in Build Script
+
+```bash
+#!/bin/bash
+# build.sh
+
+echo "Cleaning previous builds..."
+ppg clean
+
+echo "Freezing application..."
+ppg freeze
+
+echo "Creating installer..."
+ppg installer
+
+echo "Build complete!"
+```
+
+## Error Handling
+
+### Permission Issues
+
+If PPG can't delete certain files:
+
+```bash
+$ ppg clean
+PermissionError: [Errno 13] Permission denied: 'target/MyApp/MyApp.exe'
+```
+
+**Solutions**:
+
+1. **Close running app**: Ensure your frozen app isn't running
+2. **Close file explorer**: Close any windows browsing the target directory
+3. **Run with elevated permissions** (Windows):
+   ```bash
+   # Run terminal as Administrator
+   ppg clean
+   ```
+
+### Docker Container Scenarios
+
+In Docker, `target/` might be a mounted volume:
+
+```bash
+# Can't delete mounted directory
+# PPG deletes contents instead
+```
+
+The clean command handles this automatically:
+
+```python
+try:
+    rmtree(path('target'))
+except OSError:
+    # Delete contents instead of directory
+    for f in listdir(path('target')):
+        # Remove each file/directory individually
+```
+
+### Already Clean
+
+If `target/` doesn't exist (already clean):
+
+```bash
+$ ppg clean
+# Exits silently - no error
+```
+
+## Implementation Details
+
+The `clean` command (from `builtin_commands/__init__.py:621-640`):
+
+```python
+@command
+def clean():
+    """
+    Remove previous build outputs
+    """
+    try:
+        rmtree(path('target'))
+    except FileNotFoundError:
+        return
+    except OSError:
+        # In a docker container, target/ may be mounted so we can't delete it.
+        # Delete its contents instead:
+        for f in listdir(path('target')):
+            fpath = join(path('target'), f)
+            if isdir(fpath):
+                rmtree(fpath, ignore_errors=True)
+            elif isfile(fpath):
+                remove(fpath)
+            elif islink(fpath):
+                unlink(fpath)
+```
+
+### What It Does
+
+1. **Attempts** to remove entire `target/` directory
+2. **If directory doesn't exist**: Returns silently (no error)
+3. **If directory is mounted** (Docker): Removes all contents instead
+4. **Handles** files, directories, and symlinks
+5. **Ignores errors** on content deletion (Docker compatibility)
+
+## Build Workflow
+
+Typical clean workflow:
+
+<Steps>
+  <Step title="Clean Previous Build">
+    ```bash
+    ppg clean
+    ```
+  </Step>
+  
+  <Step title="Freeze Application">
+    ```bash
+    ppg freeze
+    ```
+  </Step>
+  
+  <Step title="Test Frozen App">
+    ```bash
+    ./target/MyApp/MyApp.exe
+    ```
+  </Step>
+  
+  <Step title="Create Installer">
+    ```bash
+    ppg installer
+    ```
+  </Step>
+  
+  <Step title="Distribute">
+    Upload installer to users
+  </Step>
+</Steps>
+
+## Automation
+
+### Pre-Build Script
+
+```bash
+#!/bin/bash
+# Always clean before building
+
+set -e  # Exit on error
+
+ppg clean
+ppg freeze
+ppg installer
+
+echo "Build artifacts:"
+ls -lh target/*.exe target/*.dmg target/*.deb 2>/dev/null
+```
+
+### Makefile
+
+```makefile
+.PHONY: clean freeze installer build
+
+clean:
+	ppg clean
+
+freeze: clean
+	ppg freeze
+
+installer: freeze
+	ppg installer
+
+build: installer
+	@echo "Build complete!"
+```
+
+Usage:
+
+```bash
+make build  # Runs clean, freeze, installer
+```
+
+### Python Build Script
+
+```python
+#!/usr/bin/env python
+# build.py
+import subprocess
+import sys
+
+def run(cmd):
+    """Run command and exit on failure"""
+    result = subprocess.run(cmd, shell=True)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+print("Cleaning...")
+run("ppg clean")
+
+print("Freezing...")
+run("ppg freeze")
+
+print("Creating installer...")
+run("ppg installer")
+
+print("✅ Build complete!")
+```
+
+## Continuous Integration
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/build.yml
+name: Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+      
+      - name: Install PPG
+        run: pip install ppg
+      
+      - name: Clean
+        run: ppg clean
+      
+      - name: Freeze
+        run: ppg freeze
+      
+      - name: Create Installer
+        run: ppg installer
+      
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: installer
+          path: target/*.exe
+```
+
+## What NOT to Clean
+
+<Warning>
+**Do NOT manually delete these**:
+- `src/` - Your source code
+- `venv/` or `.venv/` - Virtual environment
+- `.git/` - Git repository
+- `node_modules/` - If using web UI
+</Warning>
+
+Use `ppg clean` instead of manual deletion to ensure safe cleanup.
+
+## Disk Space Management
+
+### Check Target Size
+
+```bash
+# Linux/macOS
+du -sh target/
+
+# Windows (PowerShell)
+Get-ChildItem target -Recurse | Measure-Object -Property Length -Sum
+```
+
+### Automated Cleanup
+
+Clean old builds automatically:
+
+```bash
+# Linux/macOS cron job (daily cleanup)
+0 2 * * * cd /path/to/project && ppg clean
+
+# Windows Task Scheduler
+# Run: ppg clean in project directory daily
+```
+
+## Troubleshooting
+
+### "Permission Denied" Error
+
+**Cause**: File in use or lacks permissions
+
+**Solution**:
+1. Close all applications using target files
+2. Close file explorer windows
+3. Run terminal as administrator (Windows)
+4. Check file permissions (Linux/macOS)
+
+### Clean Fails Silently
+
+**Cause**: Usually means target/ doesn't exist
+
+**Verify**:
+```bash
+ls target/  # Check if exists
+```
+
+### Partial Clean
+
+**Cause**: Some files couldn't be deleted
+
+**Solution**:
+```bash
+# Manual cleanup
+rm -rf target/  # Linux/macOS
+rmdir /s /q target  # Windows
+```
+
+## Best Practices
+
+<Tip>
+**Clean Before Production Builds**: Always clean before building for release to ensure no stale artifacts.
+</Tip>
+
+<Tip>
+**Integrate into Scripts**: Add `ppg clean` to your build scripts for consistency.
+</Tip>
+
+<Tip>
+**Not After Every Dev Run**: You don't need to clean after `ppg start`. Only clean before `ppg freeze`.
+</Tip>
+
+## Performance Notes
+
+- **Fast operation**: Usually completes in under 1 second
+- **No network access**: Purely local file deletion
+- **Safe to interrupt**: Can Ctrl+C without corruption
+- **No confirmation**: Deletes immediately without prompting
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Your App" icon="cube" href="/cli/freeze">
+    Freeze your application after cleaning
+  </Card>
+  <Card title="Automation" icon="robot" href="/cli/clean">
+    Automate your build process
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [ppg freeze](/cli/freeze) - Compile after cleaning
+- [ppg installer](/cli/installer) - Create installers
+- [Build Automation](/cli/clean) - Scripting builds

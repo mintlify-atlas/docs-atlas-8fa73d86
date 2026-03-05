@@ -31,10 +31,84 @@ The PPG CLI provides a comprehensive set of commands to manage your desktop appl
   <Card title="ppg clean" icon="broom" href="/cli/clean">
     Remove build artifacts and temporary files
   </Card>
-  <Card title="ppg version" icon="tag" href="/cli/overview">
+  <Card title="ppg version" icon="tag" href="#ppg-version">
     Show the current PPG version
   </Card>
 </CardGroup>
+
+## Additional Commands
+
+### ppg version
+
+Show the installed PPG version:
+
+```bash
+ppg version
+```
+
+<Info>
+  This command displays the current PPG version from `package.json`.
+</Info>
+
+### ppg sign
+
+Sign your frozen application (platform-specific):
+
+```bash
+ppg sign
+```
+
+<Note>
+  Currently only implemented for Windows. Signs all binary files in the freeze directory so the OS trusts your application. See [Deployment](/advanced/deployment#code-signing) for configuration.
+</Note>
+
+### ppg sign_installer
+
+Sign your installer package:
+
+```bash
+ppg sign_installer
+```
+
+<Note>
+  Signs the installer file created by `ppg installer`. Platform-specific implementation for Windows, Linux (GPG), and macOS.
+</Note>
+
+### ppg repo
+
+Generate repository files for automatic updates:
+
+```bash
+ppg repo
+```
+
+<Info>
+  Creates repository metadata files for Linux package managers (APT, Pacman, DNF/YUM). Used for setting up automatic update channels.
+</Info>
+
+### ppg upload
+
+Upload your application to ppg.sh hosting:
+
+```bash
+ppg upload
+```
+
+<Warning>
+  Requires ppg.sh account credentials. Uploads the installer and repository files to PPG's hosting service.
+</Warning>
+
+### ppg release
+
+Manage release versions:
+
+```bash
+ppg release [version]
+```
+
+<Info>
+  Updates version numbers, creates release builds, and optionally publishes to repositories. If version is omitted, prompts interactively.
+</Info>
 
 ## Common Workflows
 
@@ -104,7 +178,14 @@ ppg freeze --help
 ### Build & Distribution
 - `freeze` - Compile executable
 - `installer` - Create installers
+- `sign` - Sign application binaries
+- `sign_installer` - Sign installer packages
 - `clean` - Clean build artifacts
+
+### Release & Publishing
+- `repo` - Generate repository files
+- `upload` - Upload to ppg.sh
+- `release` - Manage releases
 
 ## Next Steps
 
